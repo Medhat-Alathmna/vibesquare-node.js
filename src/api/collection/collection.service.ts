@@ -1,49 +1,23 @@
-import { Collection } from './collection.model';
-import { Project } from '../project/project.model';
+import { getCollectionRepository, CollectionData, CollectionsResult } from '../../shared/repositories';
 import { ApiError } from '../../shared/utils/ApiError';
-import { PaginationResult } from '../../shared/types';
 import httpStatus from 'http-status';
 
-interface CollectionsResult {
-  collections: any[];
-  pagination: PaginationResult;
-}
-
 export class CollectionService {
-  async getCollections(page: number = 1, limit: number = 12): Promise<CollectionsResult> {
-    const skip = (page - 1) * limit;
-
-    const [collections, total] = await Promise.all([
-      Collection.find()
-        .sort({ featured: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Collection.countDocuments()
-    ]);
-
-    return {
-      collections,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total
-      }
-    };
+  private get repository() {
+    return getCollectionRepository();
   }
 
-  async getCollectionById(id: string): Promise<any> {
-    const collection = await Collection.findOne({ id }).lean();
+  async getCollections(page: number = 1, limit: number = 12): Promise<CollectionsResult> {
+    return this.repository.findAll(page, limit);
+  }
+
+  async getCollectionById(id: string): Promise<CollectionData & { projects: any[] }> {
+    const collection = await this.repository.findById(id);
     if (!collection) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Collection not found');
     }
 
-    // Fetch projects in this collection
-    const projects = await Project.find({ id: { $in: collection.projectIds } })
-      .select('-codeFiles')
-      .lean();
+    const projects = await this.repository.findProjectsByCollectionId(collection.projectIds);
 
     return {
       ...collection,
@@ -51,13 +25,8 @@ export class CollectionService {
     };
   }
 
-  async getFeaturedCollections(): Promise<any[]> {
-    const collections = await Collection.find({ featured: true })
-      .sort({ createdAt: -1 })
-      .limit(6)
-      .lean();
-
-    return collections;
+  async getFeaturedCollections(): Promise<CollectionData[]> {
+    return this.repository.findFeatured();
   }
 }
 
