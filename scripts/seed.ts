@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import * as fs from 'fs';
 import * as path from 'path';
 import dotenv from 'dotenv';
+import { Pool } from 'pg';
 
 dotenv.config();
 
@@ -9,17 +10,166 @@ dotenv.config();
 import { Project } from '../src/api/project/project.model';
 import { Collection } from '../src/api/collection/collection.model';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/vibesquare';
+const MONGODB_URI = process.env.MONGODB_URI;
+
+// PostgreSQL Pool
+const pgPool = new Pool({
+  host: process.env.POSTGRES_HOST,
+  user: process.env.POSTGRES_USER,
+  password: process.env.POSTGRES_PASSWORD,
+  database: process.env.POSTGRES_DATABASE,
+  ssl: true
+});
 
 // Path to frontend data
 const FRONTEND_DATA_PATH = path.join(__dirname, '../../vibesquare-gallery/src/assets/data');
 
+async function createPostgresTables() {
+  const client = await pgPool.connect();
+  try {
+    // Create projects table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS projects (
+        id VARCHAR(255) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        short_description VARCHAR(500),
+        thumbnail VARCHAR(500),
+        screenshots JSONB DEFAULT '[]',
+        demo_url VARCHAR(500),
+        download_url VARCHAR(500),
+        prompt JSONB,
+        framework VARCHAR(100),
+        tags JSONB DEFAULT '[]',
+        styles JSONB DEFAULT '[]',
+        category VARCHAR(100),
+        likes INTEGER DEFAULT 0,
+        views INTEGER DEFAULT 0,
+        downloads INTEGER DEFAULT 0,
+        collection_ids JSONB DEFAULT '[]',
+        code_files JSONB DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create collections table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS collections (
+        id VARCHAR(255) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        thumbnail VARCHAR(500),
+        project_ids JSONB DEFAULT '[]',
+        tags JSONB DEFAULT '[]',
+        featured BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('PostgreSQL tables created successfully');
+  } finally {
+    client.release();
+  }
+}
+
+async function seedPostgres(projectsData: any[], collectionsData: any[]) {
+  const client = await pgPool.connect();
+  try {
+    // Clear existing data
+    await client.query('DELETE FROM projects');
+    await client.query('DELETE FROM collections');
+    console.log('Cleared existing PostgreSQL data');
+
+    // Insert projects
+    for (const project of projectsData) {
+      await client.query(`
+        INSERT INTO projects (
+          id, title, description, short_description, thumbnail, screenshots,
+          demo_url, download_url, prompt, framework, tags, styles, category,
+          likes, views, downloads, collection_ids, code_files, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+      `, [
+        project.id,
+        project.title,
+        project.description,
+        project.shortDescription,
+        project.thumbnail,
+        JSON.stringify(project.screenshots || []),
+        project.demoUrl,
+        project.downloadUrl,
+        JSON.stringify(project.prompt || {}),
+        project.framework,
+        JSON.stringify(project.tags || []),
+        JSON.stringify(project.styles || []),
+        project.category,
+        project.likes || 0,
+        project.views || 0,
+        project.downloads || 0,
+        JSON.stringify(project.collectionIds || []),
+        JSON.stringify(project.codeFiles || []),
+        project.createdAt || new Date(),
+        project.updatedAt || new Date()
+      ]);
+    }
+    console.log(`Inserted ${projectsData.length} projects into PostgreSQL`);
+
+    // Insert collections
+    for (const collection of collectionsData) {
+      await client.query(`
+        INSERT INTO collections (
+          id, title, description, thumbnail, project_ids, tags, featured, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [
+        collection.id,
+        collection.title,
+        collection.description,
+        collection.thumbnail,
+        JSON.stringify(collection.projectIds || []),
+        JSON.stringify(collection.tags || []),
+        collection.featured || false,
+        collection.createdAt || new Date()
+      ]);
+    }
+    console.log(`Inserted ${collectionsData.length} collections into PostgreSQL`);
+
+  } finally {
+    client.release();
+  }
+}
+
+async function seedMongoDB(projectsData: any[], collectionsData: any[]) {
+  if (!MONGODB_URI) {
+    console.log('MongoDB URI not provided, skipping MongoDB seeding');
+    return;
+  }
+
+  await mongoose.connect(MONGODB_URI);
+  console.log('Connected to MongoDB');
+
+  // Clear existing data
+  await Project.deleteMany({});
+  await Collection.deleteMany({});
+  console.log('Cleared existing MongoDB data');
+
+  // Insert projects
+  if (projectsData.length > 0) {
+    await Project.insertMany(projectsData);
+    console.log(`Inserted ${projectsData.length} projects into MongoDB`);
+  }
+
+  // Insert collections
+  if (collectionsData.length > 0) {
+    await Collection.insertMany(collectionsData);
+    console.log(`Inserted ${collectionsData.length} collections into MongoDB`);
+  }
+
+  await mongoose.disconnect();
+  console.log('Disconnected from MongoDB');
+}
+
 async function seed() {
   try {
-    // Connect to MongoDB
-    await mongoose.connect(MONGODB_URI);
-    console.log('Connected to MongoDB');
-
     // Read JSON files from frontend
     const projectsPath = path.join(FRONTEND_DATA_PATH, 'projects.json');
     const collectionsPath = path.join(FRONTEND_DATA_PATH, 'collections.json');
@@ -45,29 +195,20 @@ async function seed() {
       collectionsData = getSampleCollections();
     }
 
-    // Clear existing data
-    await Project.deleteMany({});
-    await Collection.deleteMany({});
-    console.log('Cleared existing data');
+    // Seed PostgreSQL
+    console.log('\n--- Seeding PostgreSQL ---');
+    await createPostgresTables();
+    await seedPostgres(projectsData, collectionsData);
 
-    // Insert projects
-    if (projectsData.length > 0) {
-      await Project.insertMany(projectsData);
-      console.log(`Inserted ${projectsData.length} projects`);
-    }
+    // Seed MongoDB (if available)
+    console.log('\n--- Seeding MongoDB ---');
+    await seedMongoDB(projectsData, collectionsData);
 
-    // Insert collections
-    if (collectionsData.length > 0) {
-      await Collection.insertMany(collectionsData);
-      console.log(`Inserted ${collectionsData.length} collections`);
-    }
-
-    console.log('Seeding completed successfully!');
+    console.log('\nSeeding completed successfully!');
   } catch (error) {
     console.error('Seeding failed:', error);
   } finally {
-    await mongoose.disconnect();
-    console.log('Disconnected from MongoDB');
+    await pgPool.end();
   }
 }
 
