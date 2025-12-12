@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import apiRoutes from './api';
 import { errorConverter, errorHandler } from './middleware';
 import { corsOptions } from './config';
@@ -13,8 +14,14 @@ const app: Express = express();
 // Security middleware
 app.use(helmet());
 
-// CORS
-app.use(cors(corsOptions));
+// CORS with credentials
+app.use(cors({
+  ...corsOptions,
+  credentials: true
+}));
+
+// Cookie parser
+app.use(cookieParser());
 
 // Request parsing
 app.use(express.json({ limit: '10mb' }));
