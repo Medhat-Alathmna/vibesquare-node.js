@@ -229,7 +229,35 @@ export class RoleRepository {
 
   async findById(id: string): Promise<IRole | null> {
     const result = await pgPool.query('SELECT * FROM roles WHERE id = $1', [id]);
-    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+    if (!result.rows[0]) return null;
+    return this.mapRowWithPermissionNames(result.rows[0]);
+  }
+
+  /**
+   * Maps role row and converts permission IDs to permission names
+   */
+  private async mapRowWithPermissionNames(row: any): Promise<IRole> {
+    const permissionIds: string[] = row.permissions || [];
+    let permissionNames: string[] = [];
+
+    if (permissionIds.length > 0) {
+      const permResult = await pgPool.query(
+        'SELECT name FROM permissions WHERE id = ANY($1)',
+        [permissionIds]
+      );
+      permissionNames = permResult.rows.map(p => p.name);
+    }
+
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      isSystem: row.is_system,
+      canAccessAdmin: row.can_access_admin,
+      permissions: permissionNames,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at)
+    };
   }
 
   async findByName(name: string): Promise<IRole | null> {

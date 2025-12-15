@@ -9,29 +9,66 @@ interface ValidationSchema {
   params?: Joi.ObjectSchema;
 }
 
-export const validate = (schema: ValidationSchema) => {
+export const validate = (schema: ValidationSchema | Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    const validSchema = Object.keys(schema) as (keyof ValidationSchema)[];
-    const object = validSchema.reduce((obj: Record<string, any>, key) => {
-      if (Object.prototype.hasOwnProperty.call(req, key)) {
-        obj[key] = req[key];
+    // If schema is a Joi object directly (for body validation), validate body
+    if (Joi.isSchema(schema)) {
+      const { value, error } = (schema as Joi.ObjectSchema)
+        .prefs({ errors: { label: 'key' }, abortEarly: false })
+        .validate(req.body);
+
+      if (error) {
+        const errorMessage = error.details
+          .map((details) => details.message)
+          .join(', ');
+        return next(new ApiError(httpStatus.BAD_REQUEST, errorMessage));
       }
-      return obj;
-    }, {});
 
-    const compiled = Joi.object(schema);
-    const { value, error } = compiled
-      .prefs({ errors: { label: 'key' }, abortEarly: false })
-      .validate(object);
-
-    if (error) {
-      const errorMessage = error.details
-        .map((details) => details.message)
-        .join(', ');
-      return next(new ApiError(httpStatus.BAD_REQUEST, errorMessage));
+      req.body = value;
+      return next();
     }
 
-    Object.assign(req, value);
+    // Otherwise, validate body, query, and params separately
+    const validationSchema = schema as ValidationSchema;
+    const errors: string[] = [];
+
+    if (validationSchema.body) {
+      const { value, error } = validationSchema.body
+        .prefs({ errors: { label: 'key' }, abortEarly: false })
+        .validate(req.body);
+      if (error) {
+        errors.push(...error.details.map(d => d.message));
+      } else {
+        req.body = value;
+      }
+    }
+
+    if (validationSchema.query) {
+      const { value, error } = validationSchema.query
+        .prefs({ errors: { label: 'key' }, abortEarly: false })
+        .validate(req.query);
+      if (error) {
+        errors.push(...error.details.map(d => d.message));
+      } else {
+        req.query = value;
+      }
+    }
+
+    if (validationSchema.params) {
+      const { value, error } = validationSchema.params
+        .prefs({ errors: { label: 'key' }, abortEarly: false })
+        .validate(req.params);
+      if (error) {
+        errors.push(...error.details.map(d => d.message));
+      } else {
+        req.params = value;
+      }
+    }
+
+    if (errors.length > 0) {
+      return next(new ApiError(httpStatus.BAD_REQUEST, errors.join(', ')));
+    }
+
     return next();
   };
 };

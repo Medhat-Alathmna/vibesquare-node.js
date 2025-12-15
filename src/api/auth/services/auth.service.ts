@@ -4,7 +4,6 @@ import { env } from '../../../config/env';
 import {
   userRepository,
   roleRepository,
-  permissionRepository,
   loginHistoryRepository,
   passwordResetRepository,
   emailVerificationRepository,
@@ -98,7 +97,7 @@ export class AuthService {
     });
 
     return {
-      user: this.toSafeUser(user),
+      user: await this.toSafeUser(user),
       message: 'Registration successful. Please check your email to verify your account.'
     };
   }
@@ -195,7 +194,7 @@ export class AuthService {
     }
 
     return {
-      user: this.toSafeUser(user, role),
+      user: await this.toSafeUser(user, role),
       accessToken,
       refreshToken
     };
@@ -307,7 +306,7 @@ export class AuthService {
     }
 
     return {
-      user: this.toSafeUser(user, role),
+      user: await this.toSafeUser(user, role),
       accessToken,
       refreshToken,
       isNewUser
@@ -343,7 +342,7 @@ export class AuthService {
     }
 
     return {
-      user: this.toSafeUser(user, role),
+      user: await this.toSafeUser(user, role),
       accessToken: result.newTokenPair.accessToken,
       refreshToken: result.newTokenPair.refreshToken
     };
@@ -385,7 +384,7 @@ export class AuthService {
     await emailService.sendWelcomeEmail(user.email, user.firstName);
 
     return {
-      user: this.toSafeUser(user),
+      user: await this.toSafeUser(user),
       message: 'Email verified successfully'
     };
   }
@@ -579,7 +578,7 @@ export class AuthService {
       role = await roleRepository.findById(user.roleId);
     }
 
-    return this.toSafeUser(user, role);
+    return await this.toSafeUser(user, role);
   }
 
   // ============================================
@@ -589,7 +588,7 @@ export class AuthService {
   /**
    * Convert user to safe user (remove sensitive data)
    */
-  private toSafeUser(user: IUser, role?: IRole | null): SafeUser {
+  private async toSafeUser(user: IUser, role?: IRole | null): Promise<SafeUser> {
     const safeUser: SafeUser = {
       id: user.id,
       email: user.email,
@@ -608,7 +607,7 @@ export class AuthService {
         id: role.id,
         name: role.name,
         canAccessAdmin: role.canAccessAdmin,
-        permissions: role.permissions
+        permissions: role.permissions || []
       };
     }
 
