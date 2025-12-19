@@ -209,6 +209,7 @@ export class GalleryUsersService {
       action: 'download',
       resourceType: 'project',
       resourceId: projectId,
+      metadata: { projectId },
       ipAddress,
       userAgent
     });

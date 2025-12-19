@@ -48,6 +48,7 @@ export class FavoritesService {
       action: 'favorite',
       resourceType: 'project',
       resourceId: projectId,
+      metadata: {},
       ipAddress,
       userAgent
     });
@@ -76,6 +77,7 @@ export class FavoritesService {
       action: 'unfavorite',
       resourceType: 'project',
       resourceId: projectId,
+      metadata: {},
       ipAddress,
       userAgent
     });
