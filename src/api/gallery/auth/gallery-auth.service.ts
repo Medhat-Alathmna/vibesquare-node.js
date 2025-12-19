@@ -88,7 +88,7 @@ export class GalleryAuthService {
 
     // Send verification email
     try {
-      await emailService.sendEmailVerification(user.email, verificationToken, user.username);
+      await emailService.sendVerificationEmail(user.email, verificationToken, user.username);
     } catch (error) {
       console.error('Failed to send verification email:', error);
       // Don't fail registration if email fails
@@ -282,7 +282,7 @@ export class GalleryAuthService {
     });
 
     // Send email
-    await emailService.sendEmailVerification(user.email, verificationToken, user.username);
+    await emailService.sendVerificationEmail(user.email, verificationToken, user.username);
   }
 
   /**
@@ -316,7 +316,7 @@ export class GalleryAuthService {
     });
 
     // Send email
-    await emailService.sendPasswordReset(user.email, resetToken, user.username);
+    await emailService.sendPasswordResetEmail(user.email, resetToken, user.username);
   }
 
   /**

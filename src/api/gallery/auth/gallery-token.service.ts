@@ -25,8 +25,8 @@ export class GalleryTokenService {
       type: 'gallery' // Important: distinguish from panel users
     };
 
-    return jwt.sign(payload, this.accessSecret, {
-      expiresIn: this.accessExpiration
+    return jwt.sign(payload as any, this.accessSecret as any, {
+      expiresIn: this.accessExpiration as any
     });
   }
 
