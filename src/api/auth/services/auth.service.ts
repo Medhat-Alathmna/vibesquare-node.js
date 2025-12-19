@@ -56,6 +56,12 @@ export class AuthService {
     // Hash password
     const hashedPassword = await passwordService.hash(data.password);
 
+    // Get default role
+    const userRole = await roleRepository.findByName('user');
+    if (!userRole) {
+      throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Default user role not found');
+    }
+
     // Create user
     const user = await userRepository.create({
       email: data.email.toLowerCase(),
@@ -66,6 +72,7 @@ export class AuthService {
       emailVerified: false,
       mustChangePassword: false,
       isSystem: false,
+      roleId: userRole.id,
       subscriptionTier: 'free'
     });
 
@@ -248,7 +255,13 @@ export class AuthService {
     if (!user) {
       isNewUser = true;
 
-      const userData: Partial<IUser> = {
+      // Get default role
+      const userRole = await roleRepository.findByName('user');
+      if (!userRole) {
+        throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Default user role not found');
+      }
+
+      const userData: any = {
         email: profile.email.toLowerCase(),
         firstName: profile.firstName || profile.email.split('@')[0],
         lastName: profile.lastName || '',
@@ -257,6 +270,7 @@ export class AuthService {
         emailVerified: true, // OAuth emails are verified
         mustChangePassword: false,
         isSystem: false,
+        roleId: userRole.id,
         subscriptionTier: 'free'
       };
 
@@ -266,7 +280,7 @@ export class AuthService {
         userData.githubId = profile.id;
       }
 
-      user = await userRepository.create(userData as any);
+      user = await userRepository.create(userData);
 
       // Create free subscription
       await subscriptionRepository.create({

@@ -15,7 +15,7 @@ const PasswordResetSchema = new Schema<IPasswordResetDocument>({
   timestamps: true,
   toJSON: {
     virtuals: true,
-    transform: (_, ret) => {
+    transform: (_, ret: any) => {
       delete ret._id;
       delete ret.__v;
       return ret;

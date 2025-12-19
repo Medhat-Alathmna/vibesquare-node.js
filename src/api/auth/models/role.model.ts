@@ -17,7 +17,7 @@ const RoleSchema = new Schema<IRoleDocument>({
   timestamps: true,
   toJSON: {
     virtuals: true,
-    transform: (_, ret) => {
+    transform: (_, ret: any) => {
       delete ret._id;
       delete ret.__v;
       return ret;
