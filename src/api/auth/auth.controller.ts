@@ -4,6 +4,7 @@ import { authService } from './services/auth.service';
 import { ApiResponse } from '../../shared/utils/ApiResponse';
 import { asyncHandler } from '../../shared/utils/asyncHandler';
 import { env } from '../../config/env';
+import { GoogleUserInfo, GitHubUserInfo, OAuthTokenResponse } from './auth.types';
 
 // Cookie options for refresh token
 const REFRESH_TOKEN_COOKIE_OPTIONS = {
@@ -13,6 +14,8 @@ const REFRESH_TOKEN_COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   path: '/'
 };
+
+
 
 export class AuthController {
   /**
@@ -256,7 +259,7 @@ export class AuthController {
         })
       });
 
-      const tokens = await tokenResponse.json();
+      const tokens = await tokenResponse.json() as OAuthTokenResponse;
 
       if (!tokens.access_token) {
         return res.redirect(`${env.FRONTEND_URL}/auth/login?error=oauth_failed`);
@@ -267,7 +270,7 @@ export class AuthController {
         headers: { Authorization: `Bearer ${tokens.access_token}` }
       });
 
-      const userInfo = await userInfoResponse.json();
+      const userInfo = await userInfoResponse.json() as GoogleUserInfo;
 
       // Handle OAuth login
       const result = await authService.handleOAuthLogin(
@@ -291,7 +294,7 @@ export class AuthController {
       try {
         const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
         returnUrl = stateData.returnUrl || '/';
-      } catch {}
+      } catch { }
 
       // Redirect to frontend with access token
       res.redirect(`${env.FRONTEND_URL}/auth/callback?token=${result.accessToken}&returnUrl=${encodeURIComponent(returnUrl)}`);
@@ -356,7 +359,7 @@ export class AuthController {
         })
       });
 
-      const tokens = await tokenResponse.json();
+      const tokens = await tokenResponse.json() as OAuthTokenResponse;
 
       if (!tokens.access_token) {
         return res.redirect(`${env.FRONTEND_URL}/auth/login?error=oauth_failed`);
@@ -370,7 +373,7 @@ export class AuthController {
         }
       });
 
-      const userInfo = await userInfoResponse.json();
+      const userInfo = await userInfoResponse.json() as GitHubUserInfo;
 
       // Get primary email
       const emailsResponse = await fetch('https://api.github.com/user/emails', {
@@ -380,7 +383,7 @@ export class AuthController {
         }
       });
 
-      const emails = await emailsResponse.json();
+      const emails = await emailsResponse.json() as any[];
       const primaryEmail = emails.find((e: any) => e.primary)?.email || userInfo.email;
 
       // Split name
@@ -410,7 +413,7 @@ export class AuthController {
       try {
         const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
         returnUrl = stateData.returnUrl || '/';
-      } catch {}
+      } catch { }
 
       // Redirect to frontend with access token
       res.redirect(`${env.FRONTEND_URL}/auth/callback?token=${result.accessToken}&returnUrl=${encodeURIComponent(returnUrl)}`);

@@ -150,7 +150,30 @@ export interface ILoginHistory {
   failureReason?: string;
   createdAt: Date;
 }
+export interface GoogleUserInfo {
+  id: string;
+  email: string;
+  given_name: string;
+  family_name: string;
+  picture: string;
+}
 
+export interface GitHubUserInfo {
+  id: number | string;
+  email: string;
+  login: string;
+  name: string | null;
+  avatar_url: string;
+}
+
+export interface OAuthTokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  token_type?: string;
+  scope?: string;
+  id_token?: string;
+}
 // ============================================
 // Subscription Interface
 // ============================================
