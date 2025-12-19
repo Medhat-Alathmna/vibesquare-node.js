@@ -66,6 +66,45 @@ export class RolesController {
   });
 
   /**
+   * Enable role
+   * PATCH /api/admin/roles/:id/enable
+   */
+  enableRole = asyncHandler(async (req: Request, res: Response) => {
+    const role = await rolesService.enableRole(req.params.id);
+
+    res.status(httpStatus.OK).json(
+      ApiResponse.success({ role }, 'Role enabled successfully')
+    );
+  });
+
+  /**
+   * Disable role
+   * PATCH /api/admin/roles/:id/disable
+   */
+  disableRole = asyncHandler(async (req: Request, res: Response) => {
+    const role = await rolesService.disableRole(req.params.id);
+
+    res.status(httpStatus.OK).json(
+      ApiResponse.success({ role }, 'Role disabled successfully')
+    );
+  });
+
+  /**
+   * Toggle role status
+   * PATCH /api/admin/roles/:id/toggle-status
+   */
+  toggleRoleStatus = asyncHandler(async (req: Request, res: Response) => {
+    const role = await rolesService.toggleRoleStatus(req.params.id);
+
+    res.status(httpStatus.OK).json(
+      ApiResponse.success(
+        { role },
+        `Role ${role.isActive ? 'enabled' : 'disabled'} successfully`
+      )
+    );
+  });
+
+  /**
    * Get all permissions
    * GET /api/admin/permissions
    */

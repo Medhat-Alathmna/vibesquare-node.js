@@ -2,7 +2,8 @@ import httpStatus from 'http-status';
 import { ApiError } from '../../../shared/utils/ApiError';
 import {
   roleRepository,
-  permissionRepository
+  permissionRepository,
+  userRepository
 } from '../../../shared/repositories/postgres/auth.repository';
 import { IRole, IPermission } from '../../auth/auth.types';
 
@@ -75,6 +76,7 @@ export class RolesService {
       description: data.description,
       isSystem: false,
       canAccessAdmin: data.canAccessAdmin,
+      isActive: true,
       permissions: data.permissions
     });
 
@@ -136,10 +138,90 @@ export class RolesService {
       throw new ApiError(httpStatus.FORBIDDEN, 'Cannot delete system role');
     }
 
+    // Check if any users are assigned to this role
+    const userCount = await userRepository.countByRoleId(id);
+    if (userCount > 0) {
+      throw new ApiError(
+        httpStatus.CONFLICT,
+        `Cannot delete role. ${userCount} user(s) are assigned to this role. Please reassign them first or disable the role instead.`
+      );
+    }
+
     const deleted = await roleRepository.delete(id);
 
     if (!deleted) {
       throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to delete role');
+    }
+  }
+
+  /**
+   * Enable role
+   */
+  async enableRole(id: string): Promise<IRole> {
+    const role = await roleRepository.findById(id);
+
+    if (!role) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Role not found');
+    }
+
+    if (role.isSystem) {
+      throw new ApiError(httpStatus.FORBIDDEN, 'Cannot modify system role status');
+    }
+
+    if (role.isActive) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Role is already active');
+    }
+
+    const updatedRole = await roleRepository.setActiveStatus(id, true);
+
+    if (!updatedRole) {
+      throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to enable role');
+    }
+
+    return updatedRole;
+  }
+
+  /**
+   * Disable role
+   */
+  async disableRole(id: string): Promise<IRole> {
+    const role = await roleRepository.findById(id);
+
+    if (!role) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Role not found');
+    }
+
+    if (role.isSystem) {
+      throw new ApiError(httpStatus.FORBIDDEN, 'Cannot modify system role status');
+    }
+
+    if (!role.isActive) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Role is already inactive');
+    }
+
+    const updatedRole = await roleRepository.setActiveStatus(id, false);
+
+    if (!updatedRole) {
+      throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to disable role');
+    }
+
+    return updatedRole;
+  }
+
+  /**
+   * Toggle role status (enable/disable)
+   */
+  async toggleRoleStatus(id: string): Promise<IRole> {
+    const role = await roleRepository.findById(id);
+
+    if (!role) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Role not found');
+    }
+
+    if (role.isActive) {
+      return this.disableRole(id);
+    } else {
+      return this.enableRole(id);
     }
   }
 

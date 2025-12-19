@@ -24,7 +24,7 @@ const UserSchema = new Schema<IUserDocument>({
   isSystem: { type: Boolean, default: false },
 
   // Role & Subscription
-  roleId: { type: String, index: true },
+  roleId: { type: String, required: true, index: true },
   subscriptionTier: { type: String, enum: SUBSCRIPTION_TIERS, default: 'free' },
 
   // Security

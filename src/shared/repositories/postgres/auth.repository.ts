@@ -32,6 +32,7 @@ export async function createAuthTables(): Promise<void> {
         description TEXT,
         is_system BOOLEAN DEFAULT false,
         can_access_admin BOOLEAN DEFAULT false,
+        is_active BOOLEAN DEFAULT true,
         permissions JSONB DEFAULT '[]',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -214,10 +215,10 @@ export class RoleRepository {
   async create(data: Omit<IRole, 'id' | 'createdAt' | 'updatedAt'>): Promise<IRole> {
     const id = `role-${uuidv4()}`;
     const result = await pgPool.query(
-      `INSERT INTO roles (id, name, description, is_system, can_access_admin, permissions)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO roles (id, name, description, is_system, can_access_admin, is_active, permissions)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [id, data.name, data.description, data.isSystem, data.canAccessAdmin, JSON.stringify(data.permissions)]
+      [id, data.name, data.description, data.isSystem, data.canAccessAdmin, data.isActive ?? true, JSON.stringify(data.permissions)]
     );
     return this.mapRow(result.rows[0]);
   }
@@ -254,6 +255,7 @@ export class RoleRepository {
       description: row.description,
       isSystem: row.is_system,
       canAccessAdmin: row.can_access_admin,
+      isActive: row.is_active ?? true,
       permissions: permissionNames,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
@@ -282,6 +284,10 @@ export class RoleRepository {
       fields.push(`can_access_admin = $${paramIndex++}`);
       values.push(data.canAccessAdmin);
     }
+    if (data.isActive !== undefined) {
+      fields.push(`is_active = $${paramIndex++}`);
+      values.push(data.isActive);
+    }
     if (data.permissions !== undefined) {
       fields.push(`permissions = $${paramIndex++}`);
       values.push(JSON.stringify(data.permissions));
@@ -298,6 +304,29 @@ export class RoleRepository {
       values
     );
     return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+  }
+
+  /**
+   * Set role active status (enable/disable)
+   */
+  async setActiveStatus(id: string, isActive: boolean): Promise<IRole | null> {
+    const result = await pgPool.query(
+      `UPDATE roles SET is_active = $1, updated_at = $2
+       WHERE id = $3 AND is_system = false
+       RETURNING *`,
+      [isActive, new Date(), id]
+    );
+    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+  }
+
+  /**
+   * Find all active roles
+   */
+  async findAllActive(): Promise<IRole[]> {
+    const result = await pgPool.query(
+      'SELECT * FROM roles WHERE is_active = true ORDER BY created_at DESC'
+    );
+    return result.rows.map(this.mapRow);
   }
 
   async delete(id: string): Promise<boolean> {
@@ -320,6 +349,7 @@ export class RoleRepository {
       description: row.description,
       isSystem: row.is_system,
       canAccessAdmin: row.can_access_admin,
+      isActive: row.is_active ?? true,
       permissions: row.permissions || [],
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
@@ -460,6 +490,17 @@ export class UserRepository {
       'UPDATE users SET locked_until = $1, updated_at = NOW() WHERE id = $2',
       [until, id]
     );
+  }
+
+  /**
+   * Count users with specific role
+   */
+  async countByRoleId(roleId: string): Promise<number> {
+    const result = await pgPool.query(
+      'SELECT COUNT(*) FROM users WHERE role_id = $1',
+      [roleId]
+    );
+    return parseInt(result.rows[0].count, 10);
   }
 
   private mapRow(row: any): IUser {

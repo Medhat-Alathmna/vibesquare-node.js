@@ -18,7 +18,8 @@ export const PERMISSION_MODULES = [
   'tags',
   'activity',
   'settings',
-  'analytics'
+  'analytics',
+  'gallery_users'
 ] as const;
 export type PermissionModule = typeof PERMISSION_MODULES[number];
 
@@ -55,6 +56,7 @@ export interface IRole {
   description?: string;
   isSystem: boolean; // super_admin cannot be deleted
   canAccessAdmin: boolean; // Can access admin panel
+  isActive: boolean; // Can be disabled instead of deleted
   permissions: string[]; // Permission IDs
   createdAt: Date;
   updatedAt: Date;
@@ -82,7 +84,7 @@ export interface IUser {
   isSystem: boolean; // Default admin cannot be deleted
 
   // Role & Subscription
-  roleId?: string; // For admin access
+  roleId: string; // Required - every user must have a role
   subscriptionTier: SubscriptionTier;
 
   // Security

@@ -51,4 +51,25 @@ router.delete(
   rolesController.deleteRole
 );
 
+// PATCH /api/admin/roles/:id/enable - Enable role
+router.patch(
+  '/:id/enable',
+  requirePermission('roles.update'),
+  rolesController.enableRole
+);
+
+// PATCH /api/admin/roles/:id/disable - Disable role
+router.patch(
+  '/:id/disable',
+  requirePermission('roles.update'),
+  rolesController.disableRole
+);
+
+// PATCH /api/admin/roles/:id/toggle-status - Toggle role status
+router.patch(
+  '/:id/toggle-status',
+  requirePermission('roles.update'),
+  rolesController.toggleRoleStatus
+);
+
 export default router;

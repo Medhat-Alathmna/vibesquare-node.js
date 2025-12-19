@@ -50,7 +50,12 @@ export const validate = (schema: ValidationSchema | Joi.ObjectSchema) => {
       if (error) {
         errors.push(...error.details.map(d => d.message));
       } else {
-        req.query = value;
+        // Modify query object in place instead of replacing it
+        // because req.query is a getter-only property in Express
+        Object.keys(req.query).forEach(key => {
+          delete (req.query as Record<string, unknown>)[key];
+        });
+        Object.assign(req.query, value);
       }
     }
 

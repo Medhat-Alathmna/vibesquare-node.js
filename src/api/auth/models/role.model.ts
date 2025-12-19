@@ -11,6 +11,7 @@ const RoleSchema = new Schema<IRoleDocument>({
   description: { type: String, trim: true },
   isSystem: { type: Boolean, default: false },
   canAccessAdmin: { type: Boolean, default: false },
+  isActive: { type: Boolean, default: true },
   permissions: [{ type: String }] // Permission IDs
 }, {
   timestamps: true,
@@ -28,5 +29,6 @@ const RoleSchema = new Schema<IRoleDocument>({
 // Indexes
 RoleSchema.index({ name: 1 });
 RoleSchema.index({ isSystem: 1 });
+RoleSchema.index({ isActive: 1 });
 
 export const Role = mongoose.model<IRoleDocument>('Role', RoleSchema);

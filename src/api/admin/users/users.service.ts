@@ -13,7 +13,7 @@ interface CreateUserData {
   password: string;
   firstName: string;
   lastName: string;
-  roleId?: string;
+  roleId: string; // Required - every user must have a role
   subscriptionTier?: 'free' | 'premium' | 'enterprise';
   isActive?: boolean;
   emailVerified?: boolean;
@@ -24,7 +24,7 @@ interface UpdateUserData {
   firstName?: string;
   lastName?: string;
   avatarUrl?: string;
-  roleId?: string | null;
+  roleId?: string; // Cannot be null - role is always required
   subscriptionTier?: 'free' | 'premium' | 'enterprise';
   isActive?: boolean;
   emailVerified?: boolean;
@@ -97,12 +97,15 @@ export class UsersService {
       throw new ApiError(httpStatus.CONFLICT, 'Email already registered');
     }
 
-    // Validate role if provided
-    if (data.roleId) {
-      const role = await roleRepository.findById(data.roleId);
-      if (!role) {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid role ID');
-      }
+    // Validate role - required
+    const role = await roleRepository.findById(data.roleId);
+    if (!role) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid role ID');
+    }
+
+    // Check if role is active
+    if (!role.isActive) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot assign inactive role to user');
     }
 
     // Hash password
@@ -128,11 +131,6 @@ export class UsersService {
       tier: data.subscriptionTier || 'free',
       status: 'active'
     });
-
-    let role: IRole | null = null;
-    if (user.roleId) {
-      role = await roleRepository.findById(user.roleId);
-    }
 
     return this.toSafeUser(user, role);
   }
@@ -166,6 +164,11 @@ export class UsersService {
       if (!role) {
         throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid role ID');
       }
+
+      // Check if role is active
+      if (!role.isActive) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot assign inactive role to user');
+      }
     }
 
     // Update user
@@ -174,7 +177,7 @@ export class UsersService {
       ...(data.firstName && { firstName: data.firstName }),
       ...(data.lastName && { lastName: data.lastName }),
       ...(data.avatarUrl !== undefined && { avatarUrl: data.avatarUrl }),
-      ...(data.roleId !== undefined && { roleId: data.roleId || undefined }),
+      ...(data.roleId && { roleId: data.roleId }),
       ...(data.isActive !== undefined && { isActive: data.isActive }),
       ...(data.emailVerified !== undefined && { emailVerified: data.emailVerified })
     });
@@ -272,29 +275,27 @@ export class UsersService {
   /**
    * Assign role to user
    */
-  async assignRole(userId: string, roleId: string | null): Promise<SafeUser> {
+  async assignRole(userId: string, roleId: string): Promise<SafeUser> {
     const user = await userRepository.findById(userId);
 
     if (!user) {
       throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
     }
 
-    if (roleId) {
-      const role = await roleRepository.findById(roleId);
-      if (!role) {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid role ID');
-      }
+    const role = await roleRepository.findById(roleId);
+    if (!role) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid role ID');
     }
 
-    const updatedUser = await userRepository.update(userId, { roleId: roleId || undefined });
+    // Check if role is active
+    if (!role.isActive) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot assign inactive role to user');
+    }
+
+    const updatedUser = await userRepository.update(userId, { roleId });
 
     if (!updatedUser) {
       throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to update user');
-    }
-
-    let role: IRole | null = null;
-    if (updatedUser.roleId) {
-      role = await roleRepository.findById(updatedUser.roleId);
     }
 
     return this.toSafeUser(updatedUser, role);
