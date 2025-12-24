@@ -5,7 +5,7 @@ const startServer = async () => {
   try {
     // Connect to MongoDB
     await connectDatabase();
-    console.log('Connected to MongoDB');
+    console.log(`Connected to ${env.DB_TYPE === 'mongodb' ? 'MongoDB' : 'PostgreSQL'}`);
 
     // Start server
     app.listen(env.PORT, () => {
