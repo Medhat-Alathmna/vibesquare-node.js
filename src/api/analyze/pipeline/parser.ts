@@ -1,25 +1,25 @@
 import { JSDOM } from 'jsdom';
 import {
-  ParsedDOM,
-  ParsedSection,
+  RawParsedDOM,
+  RawDOMNode,
+  MAX_DOM_DEPTH,
   NavItem,
   FormInfo,
   FormField,
   ImageInfo,
   ColorInfo,
-  FontInfo,
   CTAInfo,
   FooterInfo,
   FooterColumn,
   SocialLink,
-  EmbedInfo,
   PageMetadata,
+  CSSClassInfo,
 } from './ir.types';
 import { NormalizationResult } from './normalizer';
 import { ApiError } from '../../../shared/utils/ApiError';
 import httpStatus from 'http-status';
 
-const MAX_SECTIONS = 50;
+const MAX_ROOT_NODES = 100;  // Max top-level nodes to process
 const MIN_BODY_LENGTH = 100;
 
 // Social media platform patterns
@@ -39,77 +39,79 @@ const CTA_KEYWORDS = [
   'download', 'try free', 'start', 'join', 'register', 'book', 'order',
 ];
 
+/**
+ * Parse HTML into RawParsedDOM - Full hierarchical DOM representation
+ * NO semantic interpretation - just raw extraction
+ */
 export function parseHtml(
   normalizedResult: NormalizationResult,
   originalUrl: string
-): ParsedDOM {
+): RawParsedDOM {
   const dom = new JSDOM(normalizedResult.html);
   const document = dom.window.document;
 
   // Check for JS-only page
   const bodyText = document.body?.textContent?.trim() || '';
-  const hasSemanticTags = !!(
+  const hasContent = !!(
     document.querySelector('header') ||
     document.querySelector('main') ||
     document.querySelector('section') ||
     document.querySelector('nav') ||
     document.querySelector('footer') ||
-    document.querySelector('article')
+    document.querySelector('article') ||
+    document.querySelector('div')
   );
 
-  if (bodyText.length < MIN_BODY_LENGTH && !hasSemanticTags) {
+  if (bodyText.length < MIN_BODY_LENGTH && !hasContent) {
     throw new ApiError(
       httpStatus.UNPROCESSABLE_ENTITY,
       'This page appears to require JavaScript to render content. Only static HTML pages are supported.'
     );
   }
 
-  // Extract sections
-  const sections = extractSections(document);
+  // Extract full DOM tree - NO semantic interpretation
+  const { rootNodes, totalNodes } = extractDOMTree(
+    document.body,
+    normalizedResult.extractedCSS.classes,
+    originalUrl
+  );
 
-  // Extract navigation
+  // Extract global data for convenience
+  const allImages = extractImages(document, originalUrl);
+  const backgroundImages = extractBackgroundImages(
+    document,
+    normalizedResult.extractedCSS.classes,
+    originalUrl
+  );
+
+  // Merge images (deduplicate by URL)
+  const existingUrls = new Set(allImages.map(img => img.url));
+  for (const bgImg of backgroundImages) {
+    if (!existingUrls.has(bgImg.url)) {
+      allImages.push(bgImg);
+    }
+  }
+
+  const allForms = extractForms(document);
   const navigation = extractNavigation(document);
-
-  // Extract forms
-  const forms = extractForms(document);
-
-  // Extract images
-  const images = extractImages(document, originalUrl);
-
-  // Extract colors from inline styles
   const colors = extractColors(document);
-
-  // Combine fonts from normalization result
   const fonts = normalizedResult.extractedFonts;
-
-  // Extract CTAs
   const ctas = extractCTAs(document);
-
-  // Extract footer
   const footer = extractFooter(document);
-
-  // Extract social links
   const socialLinks = extractSocialLinks(document);
-
-  // Get embeds from normalization result
   const embeds = normalizedResult.extractedEmbeds;
-
-  // Extract metadata
   const metadata = extractMetadata(document);
-
-  // Detect language
   const language = detectLanguage(document);
-
-  // Get raw text content for LLM
   const rawTextContent = getRawTextContent(document);
 
   return {
-    sections,
+    rootNodes,
+    totalNodes,
+    allImages,
+    allForms,
     navigation,
-    forms,
-    images,
-    colors,
     fonts,
+    colors,
     ctas,
     footer,
     socialLinks,
@@ -121,52 +123,234 @@ export function parseHtml(
   };
 }
 
-function extractSections(document: Document): ParsedSection[] {
-  const sections: ParsedSection[] = [];
-  const sectionTags = ['header', 'nav', 'main', 'section', 'article', 'aside', 'footer'];
+/**
+ * Extract ALL CSS properties from element
+ * Merges: class-based CSS + inline styles
+ * NO FILTERING - all properties preserved
+ */
+function extractAllCSSProperties(
+  element: Element,
+  extractedClasses: CSSClassInfo[]
+): Record<string, string> {
+  const mergedProperties: Record<string, string> = {};
+  const className = element.className || '';
 
-  // First, try semantic sections
-  sectionTags.forEach(tag => {
-    const elements = document.querySelectorAll(tag);
-    elements.forEach((el, index) => {
-      if (sections.length >= MAX_SECTIONS) return;
+  // 1. Extract properties from CSS classes (INCLUDING media queries)
+  if (className) {
+    const classNames = className
+      .trim()
+      .split(/\s+/)
+      .filter(name => name.length > 0);
 
-      sections.push({
-        tag,
-        id: el.id || undefined,
-        className: el.className || undefined,
-        textContent: el.textContent?.slice(0, 500).trim() || '',
-        childCount: el.children.length,
-        hasImages: el.querySelectorAll('img').length > 0,
-        hasForms: el.querySelectorAll('form').length > 0,
-        order: sections.length,
-      });
-    });
-  });
+    for (const name of classNames) {
+      // Match ALL classes including media query ones
+      const matches = extractedClasses.filter(
+        cssClass => cssClass.className.toLowerCase() === name.toLowerCase()
+      );
 
-  // If no semantic sections, try divs with common class names
-  if (sections.length === 0) {
-    const commonClasses = ['hero', 'banner', 'features', 'about', 'services', 'testimonials', 'pricing', 'contact', 'cta'];
-    commonClasses.forEach(cls => {
-      const elements = document.querySelectorAll(`div[class*="${cls}"], div[id*="${cls}"]`);
-      elements.forEach(el => {
-        if (sections.length >= MAX_SECTIONS) return;
-
-        sections.push({
-          tag: 'div',
-          id: el.id || undefined,
-          className: el.className || undefined,
-          textContent: el.textContent?.slice(0, 500).trim() || '',
-          childCount: el.children.length,
-          hasImages: el.querySelectorAll('img').length > 0,
-          hasForms: el.querySelectorAll('form').length > 0,
-          order: sections.length,
-        });
-      });
-    });
+      for (const cssClass of matches) {
+        for (const [property, value] of Object.entries(cssClass.properties)) {
+          // Later values override earlier ones (CSS specificity simulation)
+          mergedProperties[property] = value;
+        }
+      }
+    }
   }
 
-  return sections.slice(0, MAX_SECTIONS);
+  // 2. Extract inline styles (style="...") - these override class properties
+  const inlineStyle = element.getAttribute('style');
+  if (inlineStyle) {
+    // Parse inline style string
+    const styleRules = inlineStyle.split(';').filter(s => s.trim());
+    for (const rule of styleRules) {
+      const [property, ...valueParts] = rule.split(':');
+      if (property && valueParts.length > 0) {
+        const propName = property.trim().toLowerCase();
+        const propValue = valueParts.join(':').trim();
+        if (propName && propValue) {
+          mergedProperties[propName] = propValue;
+        }
+      }
+    }
+  }
+
+  return mergedProperties;
+}
+
+/**
+ * Extract full DOM tree recursively
+ * Preserves complete hierarchy up to MAX_DOM_DEPTH levels
+ */
+function extractDOMTree(
+  body: Element,
+  extractedClasses: CSSClassInfo[],
+  baseUrl: string
+): { rootNodes: RawDOMNode[]; totalNodes: number } {
+  const rootNodes: RawDOMNode[] = [];
+  const orderCounter = { value: 0 };
+
+  // Process direct children of body
+  const children = Array.from(body.children).slice(0, MAX_ROOT_NODES);
+
+  for (const child of children) {
+    const node = extractNodeRecursive(
+      child as Element,
+      orderCounter,
+      0, // depth starts at 0
+      extractedClasses,
+      baseUrl
+    );
+    rootNodes.push(node);
+  }
+
+  return {
+    rootNodes,
+    totalNodes: orderCounter.value,
+  };
+}
+
+/**
+ * Recursively extract a single DOM node and all its children
+ * NO semantic interpretation - just raw data extraction
+ */
+function extractNodeRecursive(
+  element: Element,
+  orderCounter: { value: number },
+  depth: number,
+  extractedClasses: CSSClassInfo[],
+  baseUrl: string
+): RawDOMNode {
+  const currentOrder = orderCounter.value++;
+  const tag = element.tagName.toLowerCase();
+
+  // Extract all attributes
+  const attributes: Record<string, string> = {};
+  for (const attr of Array.from(element.attributes)) {
+    if (attr.name === 'class') continue;
+    attributes[attr.name] = attr.value;
+  }
+
+  // Extract CSS properties (classes + inline merged)
+  const cssProperties = extractAllCSSProperties(element, extractedClasses);
+
+  // Extract images directly in this element (not nested)
+  const images: ImageInfo[] = [];
+  const directImgs = element.querySelectorAll(':scope > img');
+  directImgs.forEach(img => {
+    let src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+    if (src) {
+      try {
+        src = new URL(src, baseUrl).toString();
+      } catch {
+        // Keep as-is
+      }
+      images.push({
+        url: src,
+        alt: (img as HTMLImageElement).alt || undefined,
+      });
+    }
+  });
+
+  // Also check if this element itself is an img
+  if (tag === 'img') {
+    let src = element.getAttribute('src') || element.getAttribute('data-src') || '';
+    if (src) {
+      try {
+        src = new URL(src, baseUrl).toString();
+      } catch {
+        // Keep as-is
+      }
+      images.push({
+        url: src,
+        alt: (element as HTMLImageElement).alt || undefined,
+      });
+    }
+  }
+
+  // Recursively process children (respecting depth limit)
+  const children: RawDOMNode[] = [];
+  const hasChildren = element.children.length > 0;
+
+  if (depth < MAX_DOM_DEPTH) {
+    for (const child of Array.from(element.children)) {
+      children.push(
+        extractNodeRecursive(
+          child as Element,
+          orderCounter,
+          depth + 1,
+          extractedClasses,
+          baseUrl
+        )
+      );
+    }
+  }
+
+  // Get direct text content (not from children)
+  let textContent = '';
+  for (const node of Array.from(element.childNodes)) {
+    if (node.nodeType === 3) { // Text node
+      textContent += node.textContent || '';
+    }
+  }
+  textContent = textContent.trim();
+
+  // If no direct text, get full text content
+  if (!textContent && element.textContent) {
+    textContent = element.textContent.trim();
+  }
+
+  return {
+    tag,
+    order: currentOrder,
+    id: element.id || undefined,
+    attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
+    depth,
+    isContainer: hasChildren,
+    children,
+    textContent,
+    cssProperties,
+    images,
+  };
+}
+
+
+/**
+ * Extract background images from CSS classes
+ * Returns array of ImageInfo for CSS background-image properties
+ */
+function extractBackgroundImages(
+  document: Document,
+  extractedClasses: CSSClassInfo[],
+  baseUrl: string
+): ImageInfo[] {
+  const bgImages: ImageInfo[] = [];
+
+  // Search all CSS classes for background-image
+  for (const cssClass of extractedClasses) {
+    const bgImageProp = cssClass.properties['background-image'] || cssClass.properties['background'];
+
+    if (bgImageProp && bgImageProp.includes('url(')) {
+      // Extract URL from url(...) syntax
+      const urlMatch = bgImageProp.match(/url\(['"]?([^'"()]+)['"]?\)/);
+      if (urlMatch) {
+        let url = urlMatch[1];
+
+        // Resolve relative URLs
+        try {
+          url = new URL(url, baseUrl).toString();
+        } catch {
+          // Keep as-is if URL parsing fails
+        }
+
+        bgImages.push({
+          url,
+          alt: `Background image from .${cssClass.className}`,
+        });
+      }
+    }
+  }
+
+  return bgImages;
 }
 
 function extractNavigation(document: Document): NavItem[] {

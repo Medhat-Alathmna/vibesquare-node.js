@@ -22,7 +22,7 @@ import { synthesizer } from './synthesizer';
 import {
   AnalysisResult,
   FetchResult,
-  ParsedDOM,
+  RawParsedDOM,
   StructuralAnalysis,
   DesignInterpretation,
   IntermediateRepresentation,
@@ -45,7 +45,7 @@ export interface PipelineOptions {
 export interface PipelineDebug {
   fetchResult: FetchResult;
   normalizedResult: Omit<NormalizationResult, 'html'>; // Exclude HTML (too large)
-  parsedDOM: ParsedDOM | ReducedParsedDOM;
+  parsedDOM: RawParsedDOM | ReducedParsedDOM;
   structuralAnalysis: StructuralAnalysis;
   designInterpretation: DesignInterpretation;
   ir: IntermediateRepresentation;
@@ -73,7 +73,7 @@ export async function executePipeline(options: PipelineOptions): Promise<Pipelin
   const parsedDOM = parser.parse(normalizedResult, fetchResult.finalUrl);
 
   // Step 3.5: Apply Token Budget (if tier or custom budget specified)
-  let finalParsedDOM: ParsedDOM | ReducedParsedDOM = parsedDOM;
+  let finalParsedDOM: RawParsedDOM | ReducedParsedDOM = parsedDOM;
   if (customBudget) {
     finalParsedDOM = applyCustomBudget(parsedDOM, customBudget);
   } else if (tier) {
@@ -81,13 +81,13 @@ export async function executePipeline(options: PipelineOptions): Promise<Pipelin
   }
 
   // Step 4: Structural Analysis (NO AI)
-  const structuralAnalysis = analyzer.analyze(finalParsedDOM as ParsedDOM);
+  const structuralAnalysis = analyzer.analyze(finalParsedDOM as RawParsedDOM);
 
   // Step 5: Design Interpretation (OpenAI or Gemini)
-  // const designInterpretation = await interpreter.interpret(parsedDOM, structuralAnalysis, model);
+  // const designInterpretation = await interpreter.interpret(finalParsedDOM as RawParsedDOM, structuralAnalysis, model);
 
   // // Step 6: Build Intermediate Representation
-  // const ir = synthesizer.buildIR(fetchResult.finalUrl, parsedDOM, structuralAnalysis, designInterpretation);
+  // const ir = synthesizer.buildIR(fetchResult.finalUrl, finalParsedDOM as RawParsedDOM, structuralAnalysis, designInterpretation);
 
   // Step 7: Synthesize Prompt
   // const prompt = synthesizer.synthesize(ir);
@@ -95,12 +95,12 @@ export async function executePipeline(options: PipelineOptions): Promise<Pipelin
   const processingTimeMs = Date.now() - startTime;
 
   // Build result
-  const result: AnalysisResult |any = {
+  const result: AnalysisResult | any = {
     // prompt,
     // ir,
     metadata: {
       sourceUrl: fetchResult.finalUrl,
-      sectionsFound: structuralAnalysis.sectionCount,
+      nodesFound: structuralAnalysis.nodeCount,
       layoutType: structuralAnalysis.layoutType,
       difficulty: structuralAnalysis.difficulty,
       language: finalParsedDOM.language,

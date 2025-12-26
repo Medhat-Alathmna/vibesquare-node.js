@@ -1,5 +1,6 @@
 import {
-  ParsedDOM,
+  RawParsedDOM,
+  RawDOMNode,
   StructuralAnalysis,
   LayoutType,
   ContentDensity,
@@ -7,166 +8,156 @@ import {
 } from './ir.types';
 
 /**
- * Structural Analyzer - 100% Deterministic, NO AI
- * Analyzes parsed DOM and returns factual structural information
+ * Visual Characteristics Interface
+ * Deterministic visual behavior inferred from CSS properties
  */
-export function analyzeStructure(parsed: ParsedDOM): StructuralAnalysis {
-  const sectionCount = parsed.sections.length;
-  const layoutType = detectLayoutType(parsed);
-  const hasHero = detectHero(parsed);
+export interface VisualCharacteristics {
+  isFixed: boolean;
+  isSticky: boolean;
+  isOverlay: boolean; // z-index > 100
+  hasBackdropEffect: boolean; // backdrop-filter present
+  hasElevation: boolean; // box-shadow present
+  colorRole: 'brand' | 'neutral' | 'accent' | 'unknown';
+  layoutRole: 'container' | 'grid' | 'flex-row' | 'flex-column' | 'absolute-positioned';
+}
+
+/**
+ * Structural Analyzer - 100% Deterministic, NO AI
+ * Analyzes parsed DOM tree and returns factual structural information
+ * NO semantic role assignment - that's for the LLM
+ */
+export function analyzeStructure(parsed: RawParsedDOM): StructuralAnalysis {
+  const nodeCount = parsed.totalNodes;
+  const rootNodeCount = parsed.rootNodes.length;
+  const maxDepth = calculateMaxDepth(parsed.rootNodes);
+  const layoutType = detectLayoutType(parsed.rootNodes);
   const hasNavigation = parsed.navigation.length > 0;
   const hasFooter = parsed.footer !== null;
-  const cardSections = countCardSections(parsed);
   const contentDensity = calculateContentDensity(parsed);
-  const { difficulty, difficultyReason } = calculateDifficulty(parsed, layoutType, cardSections);
+  const { difficulty, difficultyReason } = calculateDifficulty(parsed, layoutType);
 
   return {
-    sectionCount,
+    nodeCount,
+    rootNodeCount,
+    maxDepth,
     layoutType,
-    hasHero,
     hasNavigation,
     hasFooter,
-    cardSections,
     contentDensity,
     difficulty,
     difficultyReason,
   };
 }
 
-function detectLayoutType(parsed: ParsedDOM): LayoutType {
-  // Analyze class names for grid/flex patterns
+/**
+ * Calculate the maximum depth of the DOM tree
+ */
+function calculateMaxDepth(nodes: RawDOMNode[]): number {
+  let maxDepth = 0;
+
+  function traverse(node: RawDOMNode): void {
+    if (node.depth > maxDepth) {
+      maxDepth = node.depth;
+    }
+    for (const child of node.children) {
+      traverse(child);
+    }
+  }
+
+  for (const node of nodes) {
+    traverse(node);
+  }
+
+  return maxDepth;
+}
+
+/**
+ * Traverse all nodes in the tree and apply a callback
+ */
+function traverseTree(nodes: RawDOMNode[], callback: (node: RawDOMNode) => void): void {
+  function traverse(node: RawDOMNode): void {
+    callback(node);
+    for (const child of node.children) {
+      traverse(child);
+    }
+  }
+
+  for (const node of nodes) {
+    traverse(node);
+  }
+}
+
+/**
+ * Detect layout type based on CSS properties in the tree
+ * Uses display, grid-template-columns, flex properties
+ */
+function detectLayoutType(rootNodes: RawDOMNode[]): LayoutType {
   let gridCount = 0;
-  let twoColumnCount = 0;
-  let singleColumnCount = 0;
+  let flexCount = 0;
+  let totalContainers = 0;
 
-  parsed.sections.forEach(section => {
-    const className = (section.className || '').toLowerCase();
-    const id = (section.id || '').toLowerCase();
-    const combined = className + ' ' + id;
+  traverseTree(rootNodes, (node) => {
+    if (!node.isContainer) return;
+    totalContainers++;
 
-    // Check for grid patterns
-    if (
-      combined.includes('grid') ||
-      combined.includes('cards') ||
-      combined.includes('gallery') ||
-      combined.includes('features') ||
-      section.childCount >= 3
-    ) {
+    const display = node.cssProperties['display'];
+    const gridCols = node.cssProperties['grid-template-columns'];
+
+    // Check for grid
+    if (display === 'grid' || gridCols) {
       gridCount++;
     }
 
-    // Check for two-column patterns
-    if (
-      combined.includes('two-col') ||
-      combined.includes('split') ||
-      combined.includes('sidebar') ||
-      combined.includes('aside') ||
-      section.childCount === 2
-    ) {
-      twoColumnCount++;
+    // Check for flex
+    if (display === 'flex') {
+      flexCount++;
     }
 
-    // Check for single column patterns
-    if (
-      combined.includes('hero') ||
-      combined.includes('banner') ||
-      combined.includes('cta') ||
-      combined.includes('full-width') ||
-      section.childCount <= 1
-    ) {
-      singleColumnCount++;
+    // Also check className patterns
+    const className = (node.className || '').toLowerCase();
+    if (className.includes('grid') || className.includes('cols-')) {
+      gridCount++;
     }
   });
 
-  const total = parsed.sections.length || 1;
+  if (totalContainers === 0) return 'single-column';
+
+  const gridRatio = gridCount / totalContainers;
+  const flexRatio = flexCount / totalContainers;
 
   // Determine layout type based on ratios
-  if (gridCount / total > 0.4) {
+  if (gridRatio > 0.2) {
     return 'grid';
   }
-  if (twoColumnCount / total > 0.4) {
-    return 'two-column';
-  }
-  if (singleColumnCount / total > 0.6) {
-    return 'single-column';
-  }
-  return 'mixed';
-}
-
-function detectHero(parsed: ParsedDOM): boolean {
-  // Check first section for hero indicators
-  const firstSection = parsed.sections[0];
-  if (!firstSection) return false;
-
-  const className = (firstSection.className || '').toLowerCase();
-  const id = (firstSection.id || '').toLowerCase();
-  const tag = firstSection.tag.toLowerCase();
-  const combined = className + ' ' + id;
-
-  // Check for common hero patterns
-  if (
-    combined.includes('hero') ||
-    combined.includes('banner') ||
-    combined.includes('jumbotron') ||
-    combined.includes('splash') ||
-    combined.includes('landing') ||
-    combined.includes('intro')
-  ) {
-    return true;
-  }
-
-  // Check if it's a header followed by a large content section
-  if (tag === 'header' || tag === 'section') {
-    // Check for CTA in first section
-    const hasHeroCTA = parsed.ctas.some(cta => cta.location === 'hero' || cta.location === 'header');
-    if (hasHeroCTA) return true;
-  }
-
-  return false;
-}
-
-function countCardSections(parsed: ParsedDOM): number {
-  let cardCount = 0;
-
-  parsed.sections.forEach(section => {
-    const className = (section.className || '').toLowerCase();
-    const id = (section.id || '').toLowerCase();
-    const combined = className + ' ' + id;
-
-    if (
-      combined.includes('card') ||
-      combined.includes('feature') ||
-      combined.includes('service') ||
-      combined.includes('team') ||
-      combined.includes('testimonial') ||
-      combined.includes('pricing') ||
-      combined.includes('product') ||
-      combined.includes('portfolio') ||
-      combined.includes('blog') ||
-      combined.includes('post')
-    ) {
-      cardCount++;
+  if (flexRatio > 0.3 && gridRatio < 0.1) {
+    // Check for two-column flex layouts
+    let twoColFlex = 0;
+    traverseTree(rootNodes, (node) => {
+      if (node.cssProperties['display'] === 'flex' && node.children.length === 2) {
+        twoColFlex++;
+      }
+    });
+    if (twoColFlex > 0) {
+      return 'two-column';
     }
+  }
+  if (gridRatio > 0.1 || flexRatio > 0.2) {
+    return 'mixed';
+  }
 
-    // Also count sections with multiple similar children (likely cards)
-    if (section.childCount >= 3 && section.childCount <= 12) {
-      // Likely a card grid
-      cardCount++;
-    }
-  });
-
-  return cardCount;
+  return 'single-column';
 }
 
-function calculateContentDensity(parsed: ParsedDOM): ContentDensity {
-  // Calculate based on multiple factors
-  const textLength = parsed.rawTextContent?.length;
-  const imageCount = parsed.images.length;
-  const formCount = parsed.forms.length;
-  const sectionCount = parsed.sections.length;
+/**
+ * Calculate content density based on tree size and content
+ */
+function calculateContentDensity(parsed: RawParsedDOM): ContentDensity {
+  const textLength = parsed.rawTextContent?.length || 0;
+  const imageCount = parsed.allImages.length;
+  const formCount = parsed.allForms.length;
+  const nodeCount = parsed.totalNodes;
   const ctaCount = parsed.ctas.length;
 
-  // Score calculation
   let score = 0;
 
   // Text density
@@ -182,35 +173,45 @@ function calculateContentDensity(parsed: ParsedDOM): ContentDensity {
   if (formCount > 2) score += 2;
   else if (formCount > 0) score += 1;
 
-  // Section count
-  if (sectionCount > 10) score += 2;
-  else if (sectionCount > 5) score += 1;
+  // Node count (replaces section count)
+  if (nodeCount > 100) score += 2;
+  else if (nodeCount > 50) score += 1;
 
   // CTA count
   if (ctaCount > 5) score += 1;
 
-  // Map score to density
   if (score >= 7) return 'high';
   if (score >= 4) return 'medium';
   return 'low';
 }
 
+/**
+ * Calculate difficulty based on tree complexity
+ */
 function calculateDifficulty(
-  parsed: ParsedDOM,
-  layoutType: LayoutType,
-  cardSections: number
+  parsed: RawParsedDOM,
+  layoutType: LayoutType
 ): { difficulty: Difficulty; difficultyReason: string } {
   let score = 0;
   const reasons: string[] = [];
 
-  // Section count impact
-  if (parsed.sections.length > 15) {
+  // Node count impact
+  if (parsed.totalNodes > 100) {
     score += 3;
-    reasons.push('many sections');
-  } else if (parsed.sections.length > 8) {
+    reasons.push('many nodes');
+  } else if (parsed.totalNodes > 50) {
     score += 2;
-    reasons.push('moderate sections');
-  } else if (parsed.sections.length > 4) {
+    reasons.push('moderate nodes');
+  } else if (parsed.totalNodes > 20) {
+    score += 1;
+  }
+
+  // Tree depth impact
+  const maxDepth = calculateMaxDepth(parsed.rootNodes);
+  if (maxDepth > 15) {
+    score += 2;
+    reasons.push('deep nesting');
+  } else if (maxDepth > 10) {
     score += 1;
   }
 
@@ -222,17 +223,9 @@ function calculateDifficulty(
     score += 1;
   }
 
-  // Card sections add complexity
-  if (cardSections > 3) {
-    score += 2;
-    reasons.push('multiple card grids');
-  } else if (cardSections > 0) {
-    score += 1;
-  }
-
   // Forms add complexity
-  if (parsed.forms.length > 0) {
-    const totalFields = parsed.forms.reduce((sum, f) => sum + f.fields.length, 0);
+  if (parsed.allForms.length > 0) {
+    const totalFields = parsed.allForms.reduce((sum, f) => sum + f.fields.length, 0);
     if (totalFields > 10) {
       score += 3;
       reasons.push('complex forms');
@@ -277,7 +270,6 @@ function calculateDifficulty(
     difficulty = 'easy';
   }
 
-  // Build reason string
   const difficultyReason = reasons.length > 0
     ? reasons.slice(0, 3).join(', ')
     : difficulty === 'easy' ? 'simple structure' : 'moderate complexity';
@@ -285,6 +277,62 @@ function calculateDifficulty(
   return { difficulty, difficultyReason };
 }
 
+/**
+ * Infer visual characteristics from CSS properties
+ * 100% deterministic rule-based interpretation
+ */
+export function inferVisualCharacteristics(
+  cssProperties: Record<string, string>
+): VisualCharacteristics {
+  const result: VisualCharacteristics = {
+    isFixed: false,
+    isSticky: false,
+    isOverlay: false,
+    hasBackdropEffect: false,
+    hasElevation: false,
+    colorRole: 'unknown',
+    layoutRole: 'container'
+  };
+
+  // Position rules
+  if (cssProperties['position'] === 'fixed') {
+    result.isFixed = true;
+  }
+  if (cssProperties['position'] === 'sticky') {
+    result.isSticky = true;
+  }
+
+  // Overlay detection
+  const zIndex = parseInt(cssProperties['z-index'] || '0');
+  if (zIndex > 100) {
+    result.isOverlay = true;
+  }
+
+  // Backdrop effect
+  if (cssProperties['backdrop-filter']) {
+    result.hasBackdropEffect = true;
+  }
+
+  // Elevation
+  if (cssProperties['box-shadow']) {
+    result.hasElevation = true;
+  }
+
+  // Layout role
+  const display = cssProperties['display'];
+  if (display === 'grid') {
+    result.layoutRole = 'grid';
+  } else if (display === 'flex') {
+    const direction = cssProperties['flex-direction'];
+    result.layoutRole = direction === 'column' ? 'flex-column' : 'flex-row';
+  } else if (cssProperties['position'] === 'absolute') {
+    result.layoutRole = 'absolute-positioned';
+  }
+
+  return result;
+}
+
 export const analyzer = {
   analyze: analyzeStructure,
+  inferVisuals: inferVisualCharacteristics,
 };

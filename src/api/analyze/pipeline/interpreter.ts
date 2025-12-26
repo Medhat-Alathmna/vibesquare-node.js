@@ -1,7 +1,13 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 import { env } from '../../../config/env';
-import { ParsedDOM, StructuralAnalysis, DesignInterpretation, AnimationType } from './ir.types';
+import {
+  RawParsedDOM,
+  RawDOMNode,
+  StructuralAnalysis,
+  DesignInterpretation,
+  AnimationType,
+} from './ir.types';
 import { ApiError } from '../../../shared/utils/ApiError';
 import httpStatus from 'http-status';
 
@@ -43,49 +49,95 @@ export function getProvider(model: LLMModel): LLMProvider {
 
 export function isValidModel(model: string): model is LLMModel {
   return GEMINI_MODELS.includes(model as GeminiModel) ||
-         OPENAI_MODELS.includes(model as OpenAIModel);
+    OPENAI_MODELS.includes(model as OpenAIModel);
 }
 
 // Default model
 const DEFAULT_MODEL: LLMModel = 'gemini-1.5-flash';
 
 // Token limits
-const MAX_OUTPUT_TOKENS = 1024;
-const MAX_INPUT_CHARS = 50000; // ~12,500 tokens
+const MAX_OUTPUT_TOKENS = 2048;  // Increased for hierarchical output
+const MAX_INPUT_CHARS = 80000;  // Increased for tree structure
 
 // ============ System Prompt ============
 
-const SYSTEM_PROMPT = `You are a Design Interpreter. Your role is to analyze HTML structure and describe the design intent.
+const SYSTEM_PROMPT = `You are a Semantic DOM Interpreter.
+
+You receive a HIERARCHICAL DOM TREE representation with full CSS properties.
+Your task is to assign semantic ROLES to nodes based on visual behavior.
+
+HTML tag names are NOT the source of truth.
+The SOURCE OF TRUTH is:
+1. CSS properties (position, display, background, z-index, etc.)
+2. Visual behavior inferred from CSS
+3. Layout structure (grid, flex, columns)
+4. Content grouping patterns
 
 CRITICAL RULES:
-1. NEVER invent or assume UI elements that are not explicitly present in the data
-2. NEVER suggest redesigns or improvements
-3. ONLY describe what EXISTS in the provided structure
-4. Be conservative with animation suggestions - only fade, slide, reveal
-5. Focus on layout intent, visual hierarchy, and emphasis
+- NEVER classify nodes based only on tag name
+- Use CSS properties to infer visual behavior
+- Use the "order" field to identify nodes in your response
+- Assign roles to SIGNIFICANT nodes only (containers with visual identity)
+- Skip trivial nodes (empty divs, wrapper elements with no CSS)
 
-You will receive:
-- Structural analysis (sections, layout type, etc.)
-- Page metadata (title, description)
-- Navigation structure
-- Forms summary
-- CTA information
-- Color palette
-- Typography information
+NODE ROLE EXAMPLES:
+- order 0: header (position: fixed, z-index high)
+- order 5: hero (large padding, prominent background, contains CTA)
+- order 12: features-grid (display: grid, contains cards)
+- order 25: testimonials (contains quotes, avatar images)
+- order 40: footer (bottom of page, contains links/copyright)
 
-Respond ONLY in valid JSON format with this exact structure:
+CSS INTERPRETATION RULES:
+- position: fixed/sticky → likely Header / Nav / Overlay
+- background-color or gradient → visual block identity
+- z-index > 10 → layered importance
+- display: grid/flex with multiple children → section with cards
+- padding > 40px → major section boundary
+- max-width with margin: auto → centered content container
+
+OUTPUT REQUIREMENTS:
+- Output ONLY valid JSON
+- Include only SIGNIFICANT nodes (not every node)
+- Each node interpretation must include:
+  - nodeOrder (number matching the "order" field from input)
+  - inferredRole (e.g. header, hero, features, testimonials, pricing, cta, footer)
+  - confidence ("high" | "medium" | "low")
+  - cssSignalsUsed (array of CSS properties that influenced the decision)
+  - visualDescription (factual description based on CSS, not imagination)
+
+Expected JSON structure:
 {
-  "layoutIntent": "Brief description of the overall layout purpose",
-  "hierarchy": "Description of visual hierarchy and content flow",
-  "emphasis": ["Array of emphasized elements/sections"],
-  "suggestedAnimations": ["fade" | "slide" | "reveal"],
-  "responsiveHints": ["Array of responsive design considerations"]
-}`;
+  "nodes": [
+    {
+      "nodeOrder": 0,
+      "inferredRole": "header",
+      "confidence": "high",
+      "cssSignalsUsed": ["position: fixed", "z-index: 1000"],
+      "visualDescription": "Fixed navigation bar at top of page"
+    },
+    {
+      "nodeOrder": 5,
+      "inferredRole": "hero",
+      "confidence": "high",
+      "cssSignalsUsed": ["padding", "background", "height"],
+      "visualDescription": "Large hero section with centered content"
+    }
+  ],
+  "layoutIntent": "Marketing landing page with hero, features, and CTA",
+  "hierarchy": "Header → Hero → Features → Testimonials → CTA → Footer",
+  "emphasis": ["hero", "cta"],
+  "suggestedAnimations": ["fade"],
+  "responsiveHints": ["Grid collapses to single column on mobile"]
+}
+
+FINAL GOAL:
+Produce semantic role assignments for significant visual nodes based on CSS behavior.`;
+
 
 // ============ Main Interpret Function ============
 
 export async function interpretDesign(
-  parsed: ParsedDOM,
+  parsed: RawParsedDOM,
   structural: StructuralAnalysis,
   model: LLMModel = DEFAULT_MODEL
 ): Promise<DesignInterpretation> {
@@ -123,7 +175,7 @@ async function interpretWithOpenAI(
       model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `Analyze this page structure and provide design interpretation:\n\n${summary}` }
+        { role: 'user', content: `Analyze this DOM tree and provide node interpretations:\n\n${summary}` }
       ],
       max_tokens: MAX_OUTPUT_TOKENS,
       response_format: { type: 'json_object' },
@@ -173,7 +225,7 @@ async function interpretWithGemini(
   try {
     const result = await generativeModel.generateContent([
       { text: SYSTEM_PROMPT },
-      { text: `Analyze this page structure and provide design interpretation:\n\n${summary}` }
+      { text: `Analyze this DOM tree and provide node interpretations:\n\n${summary}` }
     ]);
 
     const response = result.response;
@@ -202,118 +254,105 @@ async function interpretWithGemini(
 
 // ============ Helper Functions ============
 
-function buildStructuredSummary(parsed: ParsedDOM, structural: StructuralAnalysis): string {
-  const lines: string[] = [];
+import { encode } from '@toon-format/toon';
 
-  // Page metadata
-  lines.push('## Page Metadata');
-  lines.push(`- Title: ${parsed.metadata.title || 'N/A'}`);
-  lines.push(`- Description: ${parsed.metadata.description || 'N/A'}`);
-  lines.push(`- Language: ${parsed.language}`);
-  lines.push('');
+/**
+ * Build a hierarchical summary of the DOM tree for LLM interpretation
+ * Uses TOON format + CSS Deduplication for minimal token usage
+ */
+function buildStructuredSummary(parsed: RawParsedDOM, structural: StructuralAnalysis): string {
+  // 1. Deduplicate CSS
+  const { cssMap, optimizedNodes } = optimizeCSS(parsed.rootNodes);
 
-  // Structural analysis
-  lines.push('## Structural Analysis');
-  lines.push(`- Section Count: ${structural.sectionCount}`);
-  lines.push(`- Layout Type: ${structural.layoutType}`);
-  lines.push(`- Has Hero: ${structural.hasHero}`);
-  lines.push(`- Has Navigation: ${structural.hasNavigation}`);
-  lines.push(`- Has Footer: ${structural.hasFooter}`);
-  lines.push(`- Card Sections: ${structural.cardSections}`);
-  lines.push(`- Content Density: ${structural.contentDensity}`);
-  lines.push('');
+  // 2. Prepare Data Structure for TOON
+  const context = {
+    metadata: {
+      title: parsed.metadata.title,
+      description: parsed.metadata.description?.slice(0, 200), // Truncate
+      language: parsed.language,
+    },
+    structure: {
+      nodeCount: structural.nodeCount,
+      rootNodes: structural.rootNodeCount,
+      maxDepth: structural.maxDepth,
+      layout: structural.layoutType,
+    },
+    cssMap: cssMap,
+    tree: optimizedNodes,
+    // Add specific data arrays if relevant (flat lists for reference if needed)
+    // but tree should cover most.
+    forms: parsed.allForms.map(f => ({ ...f, fields: f.fields.map(field => `${field.name} (${field.type})`) })),
+    nav: parsed.navigation.map(n => n.text),
+  };
 
-  // Sections
-  lines.push('## Sections');
-  parsed.sections.forEach((section, i) => {
-    lines.push(`${i + 1}. [${section.tag}] ${section.id || section.className || 'unnamed'}`);
-    lines.push(`   - Children: ${section.childCount}, Has Images: ${section.hasImages}, Has Forms: ${section.hasForms}`);
-    if (section.textContent) {
-      lines.push(`   - Preview: "${section.textContent.slice(0, 100)}..."`);
-    }
-  });
-  lines.push('');
-
-  // Navigation
-  if (parsed.navigation.length > 0) {
-    lines.push('## Navigation');
-    parsed.navigation.forEach(item => {
-      lines.push(`- ${item.text}${item.isButton ? ' [BUTTON]' : ''}`);
-      if (item.children.length > 0) {
-        item.children.forEach(child => lines.push(`  - ${child.text}`));
-      }
-    });
-    lines.push('');
-  }
-
-  // CTAs
-  if (parsed.ctas.length > 0) {
-    lines.push('## Call-to-Actions');
-    parsed.ctas.forEach(cta => {
-      lines.push(`- "${cta.text}" [${cta.type}] in ${cta.location}`);
-    });
-    lines.push('');
-  }
-
-  // Forms
-  if (parsed.forms.length > 0) {
-    lines.push('## Forms');
-    parsed.forms.forEach((form, i) => {
-      lines.push(`Form ${i + 1}: ${form.fields.length} fields`);
-      form.fields.forEach(field => {
-        lines.push(`  - ${field.label || field.name}: ${field.type}${field.required ? ' (required)' : ''}`);
-      });
-      if (form.submitButtonText) {
-        lines.push(`  - Submit: "${form.submitButtonText}"`);
-      }
-    });
-    lines.push('');
-  }
-
-  // Colors
-  if (parsed.colors.length > 0) {
-    lines.push('## Color Palette');
-    const topColors = parsed.colors.slice(0, 5);
-    topColors.forEach(color => {
-      lines.push(`- ${color.value} (${color.property})`);
-    });
-    lines.push('');
-  }
-
-  // Fonts
-  if (parsed.fonts.length > 0) {
-    lines.push('## Typography');
-    parsed.fonts.forEach(font => {
-      lines.push(`- ${font.family} (${font.source})`);
-    });
-    lines.push('');
-  }
-
-  // Footer
-  if (parsed.footer) {
-    lines.push('## Footer');
-    lines.push(`- Columns: ${parsed.footer.columns.length}`);
-    if (parsed.footer.copyright) {
-      lines.push(`- Copyright: ${parsed.footer.copyright}`);
-    }
-    if (parsed.footer.socialLinks.length > 0) {
-      lines.push(`- Social Links: ${parsed.footer.socialLinks.map(s => s.platform).join(', ')}`);
-    }
-    lines.push('');
-  }
-
-  // Embeds
-  if (parsed.embeds.length > 0) {
-    lines.push('## Embedded Content');
-    parsed.embeds.forEach(embed => {
-      lines.push(`- ${embed.type}${embed.platform ? ` (${embed.platform})` : ''}`);
-    });
-    lines.push('');
-  }
-
-  return lines.join('\n');
+  // 3. Serialize with TOON
+  return encode(context);
 }
 
+// Helper types for optimization
+interface OptimizedNode {
+  id: number;
+  tag: string;
+  css: number; // ID reference to CSS map
+  txt?: string;
+  img?: number; // count
+  children?: OptimizedNode[];
+}
+
+function optimizeCSS(nodes: RawDOMNode[]): { cssMap: Record<number, any>, optimizedNodes: OptimizedNode[] } {
+  const cssSignatureMap = new Map<string, number>();
+  const cssIdMap: Record<number, any> = {};
+  let nextCssId = 1;
+
+  function getCssId(props: Record<string, string>): number {
+    if (!props || Object.keys(props).length === 0) return 0;
+
+    // Sort keys for deterministic signature
+    const signature = JSON.stringify(Object.entries(props).sort((a, b) => a[0].localeCompare(b[0])));
+
+    if (cssSignatureMap.has(signature)) {
+      return cssSignatureMap.get(signature)!;
+    }
+
+    const id = nextCssId++;
+    cssSignatureMap.set(signature, id);
+    cssIdMap[id] = props;
+    return id;
+  }
+
+  function transformNode(node: RawDOMNode): OptimizedNode {
+    const optimized: OptimizedNode = {
+      id: node.order,
+      tag: node.tag,
+      css: getCssId(node.cssProperties),
+    };
+
+    if (node.textContent && node.textContent.length > 0) {
+      optimized.txt = node.textContent.slice(0, 50).replace(/\s+/g, ' ');
+    }
+
+    if (node.images && node.images.length > 0) {
+      optimized.img = node.images.length;
+    }
+
+    if (node.children && node.children.length > 0) {
+      optimized.children = node.children.map(transformNode);
+    }
+
+    return optimized;
+  }
+
+  const optimizedNodes = nodes.map(transformNode);
+
+  return {
+    cssMap: cssIdMap,
+    optimizedNodes
+  };
+}
+
+/**
+ * Parse LLM response into DesignInterpretation
+ */
 function parseInterpretationResponse(text: string): DesignInterpretation {
   // Try to extract JSON from response
   let jsonStr = text.trim();
@@ -328,9 +367,28 @@ function parseInterpretationResponse(text: string): DesignInterpretation {
     const parsed = JSON.parse(jsonStr);
 
     // Validate required fields
-    if (!parsed.layoutIntent || !parsed.hierarchy) {
-      throw new Error('Missing required fields in LLM response');
+    if (!parsed.nodes || !Array.isArray(parsed.nodes)) {
+      throw new Error('Missing or invalid "nodes" array in LLM response');
     }
+    if (!parsed.layoutIntent || !parsed.hierarchy) {
+      throw new Error('Missing required fields (layoutIntent, hierarchy) in LLM response');
+    }
+
+    // Parse nodes with validation
+    const nodes = parsed.nodes.map((n: any, i: number) => {
+      if (!n.inferredRole || !n.confidence || !n.visualDescription || n.nodeOrder === undefined) {
+        throw new Error(`Node ${i} missing required fields: ${JSON.stringify(n)}`);
+      }
+      return {
+        nodeOrder: Number(n.nodeOrder) || 0,
+        inferredRole: String(n.inferredRole || 'unknown'),
+        confidence: (n.confidence === 'high' || n.confidence === 'medium' || n.confidence === 'low')
+          ? n.confidence
+          : 'low',
+        cssSignalsUsed: Array.isArray(n.cssSignalsUsed) ? n.cssSignalsUsed.map(String) : [],
+        visualDescription: String(n.visualDescription || 'No description provided'),
+      };
+    });
 
     // Validate and sanitize animations
     const validAnimations: AnimationType[] = ['fade', 'slide', 'reveal'];
@@ -338,6 +396,7 @@ function parseInterpretationResponse(text: string): DesignInterpretation {
       .filter((a: string) => validAnimations.includes(a as AnimationType)) as AnimationType[];
 
     return {
+      nodes,
       layoutIntent: String(parsed.layoutIntent),
       hierarchy: String(parsed.hierarchy),
       emphasis: Array.isArray(parsed.emphasis) ? parsed.emphasis.map(String) : [],
@@ -346,7 +405,6 @@ function parseInterpretationResponse(text: string): DesignInterpretation {
     };
 
   } catch (error) {
-    // Throw error instead of returning fallback values
     throw new ApiError(httpStatus.SERVICE_UNAVAILABLE,
       `Failed to interpret design: Invalid LLM response - ${error instanceof Error ? error.message : 'Parse error'}`);
   }

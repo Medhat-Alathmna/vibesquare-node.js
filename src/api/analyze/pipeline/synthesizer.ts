@@ -1,13 +1,15 @@
 import {
   IntermediateRepresentation,
-  ParsedDOM,
+  RawParsedDOM,
+  RawDOMNode,
   StructuralAnalysis,
   DesignInterpretation,
-  IRSection,
+  IRNode,
   LayoutInfo,
   ComponentInfo,
   NavigationInfo,
   MotionIntent,
+  ImageInfo,
 } from './ir.types';
 
 /**
@@ -17,23 +19,46 @@ import {
  * Audience: AI Code Generators only
  */
 
+/**
+ * Build Intermediate Representation from parsed DOM and LLM interpretation
+ */
 export function buildIntermediateRepresentation(
   sourceUrl: string,
-  parsed: ParsedDOM,
+  parsed: RawParsedDOM,
   structural: StructuralAnalysis,
   interpretation: DesignInterpretation
 ): IntermediateRepresentation {
-  // Build IR sections from parsed sections
-  const sections: IRSection[] = parsed.sections.map((section, index) => ({
-    order: index + 1,
-    type: detectSectionType(section.className, section.id, section.tag, index),
-    description: section.textContent.slice(0, 200),
-    hasCards: section.className?.toLowerCase().includes('card') || section.childCount >= 3,
-    cardCount: section.childCount >= 3 ? section.childCount : undefined,
-    layout: structural.layoutType,
-  }));
+  // Build a map from node order to node for quick lookup
+  const nodeMap = new Map<number, RawDOMNode>();
+  traverseTree(parsed.rootNodes, (node) => {
+    nodeMap.set(node.order, node);
+  });
 
-  // Build layout info - use actual CSS data when available
+  // Build IR nodes from LLM interpretation + parsed data
+  const nodes: IRNode[] = interpretation.nodes.map((llmNode) => {
+    const rawNode = nodeMap.get(llmNode.nodeOrder);
+
+    // Collect images from node and its children
+    const nodeImages: ImageInfo[] = [];
+    if (rawNode) {
+      collectImages(rawNode, nodeImages);
+    }
+
+    return {
+      order: llmNode.nodeOrder,
+      tag: rawNode?.tag || 'unknown',
+      type: llmNode.inferredRole,
+      description: llmNode.visualDescription,
+      cssProperties: rawNode?.cssProperties || {},
+      depth: rawNode?.depth || 0,
+      isContainer: rawNode?.isContainer || false,
+      childCount: rawNode?.children.length || 0,
+      roleConfidence: llmNode.confidence,
+      images: nodeImages,
+    };
+  });
+
+  // Build layout info
   const layout: LayoutInfo = {
     type: structural.layoutType,
     hasGrid: structural.layoutType === 'grid',
@@ -42,40 +67,61 @@ export function buildIntermediateRepresentation(
                   structural.layoutType === 'single-column' ? 1 : undefined),
   };
 
-  // Build components
+  // Build components based on LLM interpretation
   const components: ComponentInfo[] = [];
-  if (structural.hasHero) {
+
+  // Check if LLM identified a hero
+  const hasHero = interpretation.nodes.some(n =>
+    n.inferredRole.toLowerCase().includes('hero')
+  );
+  if (hasHero) {
     components.push({ type: 'hero', description: 'Hero section with headline and CTA', location: 'top' });
   }
-  if (parsed.forms.length > 0) {
-    components.push({ type: 'form', description: `${parsed.forms.length} form(s) with ${parsed.forms.reduce((a, f) => a + f.fields.length, 0)} total fields`, location: 'various' });
-  }
-  if (structural.cardSections > 0) {
-    components.push({ type: 'card-grid', description: `${structural.cardSections} card-based section(s)`, location: 'various' });
+
+  if (parsed.allForms.length > 0) {
+    components.push({
+      type: 'form',
+      description: `${parsed.allForms.length} form(s) with ${parsed.allForms.reduce((a, f) => a + f.fields.length, 0)} total fields`,
+      location: 'various'
+    });
   }
 
-  // Build navigation info - don't assume mobile menu exists
+  // Check for grid/card sections from LLM interpretation
+  const cardSections = interpretation.nodes.filter(n =>
+    n.inferredRole.toLowerCase().includes('feature') ||
+    n.inferredRole.toLowerCase().includes('card') ||
+    n.inferredRole.toLowerCase().includes('grid') ||
+    n.inferredRole.toLowerCase().includes('testimonial')
+  );
+  if (cardSections.length > 0) {
+    components.push({
+      type: 'card-grid',
+      description: `${cardSections.length} card-based section(s)`,
+      location: 'various'
+    });
+  }
+
+  // Build navigation info
   const navigation: NavigationInfo | null = parsed.navigation.length > 0 ? {
-    position: 'top',
-    style: 'fixed',
+    position: null,  // Cannot determine from HTML alone
+    style: null,     // Cannot determine from HTML alone
     items: parsed.navigation,
-    // hasMobileMenu omitted - cannot determine from HTML alone
   } : null;
 
-  // Build motion intents from interpretation
+  // Build motion intents
   const motionIntent: MotionIntent[] = interpretation.suggestedAnimations.map(anim => ({
-    element: 'sections',
+    element: 'nodes',
     animation: anim,
-    trigger: anim === 'fade' ? 'load' : 'scroll',
+    trigger: null,  // Don't guess load vs scroll
   }));
 
   return {
     sourceUrl,
-    sections,
+    nodes,
     layout,
     components,
     navigation,
-    forms: parsed.forms,
+    forms: parsed.allForms,
     ctas: parsed.ctas,
     footer: parsed.footer,
     embeds: parsed.embeds,
@@ -93,33 +139,35 @@ export function buildIntermediateRepresentation(
   };
 }
 
-function detectSectionType(
-  className: string | undefined,
-  id: string | undefined,
-  tag: string,
-  index: number
-): string {
-  const combined = ((className || '') + ' ' + (id || '')).toLowerCase();
+/**
+ * Traverse all nodes in the tree and apply a callback
+ */
+function traverseTree(nodes: RawDOMNode[], callback: (node: RawDOMNode) => void): void {
+  function traverse(node: RawDOMNode): void {
+    callback(node);
+    for (const child of node.children) {
+      traverse(child);
+    }
+  }
 
-  if (index === 0 || combined.includes('hero') || combined.includes('banner')) return 'hero';
-  if (combined.includes('feature')) return 'features';
-  if (combined.includes('service')) return 'services';
-  if (combined.includes('about')) return 'about';
-  if (combined.includes('testimonial') || combined.includes('review')) return 'testimonials';
-  if (combined.includes('pricing') || combined.includes('plan')) return 'pricing';
-  if (combined.includes('team')) return 'team';
-  if (combined.includes('contact')) return 'contact';
-  if (combined.includes('faq')) return 'faq';
-  if (combined.includes('cta') || combined.includes('call-to-action')) return 'cta';
-  if (combined.includes('blog') || combined.includes('post')) return 'blog';
-  if (combined.includes('gallery') || combined.includes('portfolio')) return 'gallery';
-  if (tag === 'header') return 'header';
-  if (tag === 'footer') return 'footer';
-  if (tag === 'nav') return 'navigation';
-
-  return 'content';
+  for (const node of nodes) {
+    traverse(node);
+  }
 }
 
+/**
+ * Collect all images from a node and its children
+ */
+function collectImages(node: RawDOMNode, images: ImageInfo[]): void {
+  images.push(...node.images);
+  for (const child of node.children) {
+    collectImages(child, images);
+  }
+}
+
+/**
+ * Synthesize final prompt from Intermediate Representation
+ */
 export function synthesizePrompt(ir: IntermediateRepresentation): string {
   const lines: string[] = [];
 
@@ -144,31 +192,121 @@ export function synthesizePrompt(ir: IntermediateRepresentation): string {
 
   // Page structure overview
   lines.push('## Page Structure Overview');
-  lines.push(`This landing page uses a **${ir.layout.type}** layout with **${ir.sections.length}** distinct sections.`);
+  lines.push(`This landing page uses a **${ir.layout.type}** layout with **${ir.nodes.length}** significant sections.`);
   lines.push('');
 
-  // Sections detail
+  // Nodes detail (semantic sections)
   lines.push('## Sections');
   lines.push('Build the following sections in order:');
   lines.push('');
 
-  ir.sections.forEach((section, index) => {
-    lines.push(`### ${index + 1}. ${capitalizeFirst(section.type)} Section`);
-    if (section.description) {
-      lines.push(`Content preview: "${section.description.slice(0, 100)}..."`);
+  ir.nodes.forEach((node, index) => {
+    const confidenceMark = node.roleConfidence === 'low' ? ' (low confidence)' :
+                           node.roleConfidence === 'medium' ? ' (medium confidence)' : '';
+    lines.push(`### ${index + 1}. ${capitalizeFirst(node.type)} Section${confidenceMark}`);
+
+    // Description (from LLM)
+    if (node.description) {
+      lines.push(`**Purpose:** ${node.description}`);
+      lines.push('');
     }
-    if (section.hasCards && section.cardCount) {
-      lines.push(`- Contains a grid of **${section.cardCount}** cards`);
+
+    // Node info
+    lines.push(`**Element:** \`<${node.tag}>\` (order: ${node.order}, depth: ${node.depth})`);
+    lines.push('');
+
+    // Visual Implementation Details (from CSS)
+    if (node.cssProperties && Object.keys(node.cssProperties).length > 0) {
+      lines.push('**Visual Implementation:**');
+
+      // Position & Layout
+      if (node.cssProperties['position'] && node.cssProperties['position'] !== 'static') {
+        lines.push(`- Position: \`${node.cssProperties['position']}\``);
+        if (node.cssProperties['top']) lines.push(`  - Top: \`${node.cssProperties['top']}\``);
+        if (node.cssProperties['z-index']) lines.push(`  - Z-index: \`${node.cssProperties['z-index']}\``);
+      }
+
+      // Background
+      const bg = node.cssProperties['background-color'] || node.cssProperties['background'];
+      if (bg) {
+        lines.push(`- Background: \`${bg}\``);
+      }
+
+      // Color
+      if (node.cssProperties['color']) {
+        lines.push(`- Text Color: \`${node.cssProperties['color']}\``);
+      }
+
+      // Layout System
+      if (node.cssProperties['display']) {
+        const display = node.cssProperties['display'];
+        lines.push(`- Layout: \`${display}\``);
+
+        if (display === 'grid' && node.cssProperties['grid-template-columns']) {
+          lines.push(`  - Columns: \`${node.cssProperties['grid-template-columns']}\``);
+        }
+
+        if (display === 'flex') {
+          if (node.cssProperties['flex-direction']) {
+            lines.push(`  - Direction: \`${node.cssProperties['flex-direction']}\``);
+          }
+          if (node.cssProperties['justify-content']) {
+            lines.push(`  - Justify: \`${node.cssProperties['justify-content']}\``);
+          }
+        }
+      }
+
+      // Spacing
+      if (node.cssProperties['padding']) {
+        lines.push(`- Padding: \`${node.cssProperties['padding']}\``);
+      }
+
+      // Visual Effects
+      if (node.cssProperties['box-shadow']) {
+        lines.push(`- Elevation: \`${node.cssProperties['box-shadow']}\``);
+      }
+      if (node.cssProperties['backdrop-filter']) {
+        lines.push(`- Backdrop: \`${node.cssProperties['backdrop-filter']}\``);
+      }
+      if (node.cssProperties['border-radius']) {
+        lines.push(`- Border Radius: \`${node.cssProperties['border-radius']}\``);
+      }
+
+      lines.push('');
     }
-    lines.push(`- Layout: ${section.layout}`);
+
+    // Include images
+    if (node.images.length > 0) {
+      lines.push(`**Images (${node.images.length}):**`);
+      node.images.slice(0, 3).forEach(img => {
+        lines.push(`- ${img.alt || 'Decorative image'}`);
+      });
+      if (node.images.length > 3) {
+        lines.push(`- ... and ${node.images.length - 3} more images`);
+      }
+      lines.push('');
+    }
+
+    // Container info
+    if (node.isContainer && node.childCount > 0) {
+      lines.push(`- Contains **${node.childCount}** child elements`);
+    }
     lines.push('');
   });
 
   // Navigation
   if (ir.navigation) {
     lines.push('## Navigation');
-    lines.push(`Position: **${ir.navigation.position}**, Style: **${ir.navigation.style}**`);
-    lines.push('');
+
+    // Only include position/style if known
+    if (ir.navigation.position || ir.navigation.style) {
+      const parts = [];
+      if (ir.navigation.position) parts.push(`Position: **${ir.navigation.position}**`);
+      if (ir.navigation.style) parts.push(`Style: **${ir.navigation.style}**`);
+      lines.push(parts.join(', '));
+      lines.push('');
+    }
+
     lines.push('Menu items:');
     ir.navigation.items.forEach(item => {
       const buttonMark = item.isButton ? ' `[BUTTON]`' : '';
@@ -264,7 +402,8 @@ export function synthesizePrompt(ir: IntermediateRepresentation): string {
     lines.push('### Animations');
     lines.push('Apply conservative animations:');
     ir.motionIntent.forEach(motion => {
-      lines.push(`- **${motion.animation}** on ${motion.element} (trigger: ${motion.trigger})`);
+      const triggerText = motion.trigger ? ` (trigger: ${motion.trigger})` : ' (trigger: TBD)';
+      lines.push(`- **${motion.animation}** on ${motion.element}${triggerText}`);
     });
     lines.push('');
   }
@@ -277,7 +416,6 @@ export function synthesizePrompt(ir: IntermediateRepresentation): string {
     });
     lines.push('');
   }
-
 
   // JSON Schema
   lines.push('---');

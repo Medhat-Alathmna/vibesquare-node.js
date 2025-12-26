@@ -1,0 +1,3519 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+analyze.controller.ts
+analyze.router.ts
+analyze.service.ts
+analyze.validator.ts
+index.ts
+pipeline/analyzer.ts
+pipeline/fetcher.ts
+pipeline/index.ts
+pipeline/interpreter.ts
+pipeline/ir.types.ts
+pipeline/normalizer.ts
+pipeline/parser.ts
+pipeline/synthesizer.ts
+pipeline/token-budget.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="analyze.controller.ts">
+import { Request, Response } from 'express';
+import { analyzeService } from './analyze.service';
+import { asyncHandler } from '../../shared/utils/asyncHandler';
+import { ApiResponse } from '../../shared/utils/ApiResponse';
+import { LLMModel } from './pipeline';
+
+export const analyzeUrl = asyncHandler(async (req: Request, res: Response) => {
+  const { url, model, tier, customBudget } = req.body;
+
+  const result = await analyzeService.analyzeUrl({
+    url,
+    model: model as LLMModel,
+    tier,
+    customBudget,
+  });
+
+  res.json(new ApiResponse(200, {
+    prompt: result.prompt,
+    metadata: result.metadata,
+    debug: result.debug,
+  }, 'Analysis completed successfully'));
+});
+</file>
+
+<file path="analyze.router.ts">
+import { Router } from 'express';
+import * as analyzeController from './analyze.controller';
+import { validate } from '../../middleware/validation.middleware';
+import { authenticate } from '../../middleware/auth.middleware';
+import * as analyzeValidator from './analyze.validator';
+
+const router = Router();
+
+/**
+ * POST /api/analyze
+ * Analyze a URL and generate a professional prompt for AI Code Generators
+ *
+ * @requires Authentication
+ * @body {string} url - The URL to analyze (required)
+ * @body {string} model - Gemini model to use (optional, default: gemini-1.5-flash)
+ * @body {boolean} skipCache - Skip cache and force re-analysis (optional, default: false)
+ */
+router.post('/',
+  // authenticate(),
+  validate(analyzeValidator.analyzeUrl),
+  analyzeController.analyzeUrl
+);
+
+export default router;
+</file>
+
+<file path="analyze.service.ts">
+import { executePipeline, LLMModel, PipelineResult, UserTier, TokenBudgetConfig } from './pipeline';
+
+export interface AnalyzeOptions {
+  url: string;
+  model?: LLMModel;
+  tier?: UserTier;
+  customBudget?: Partial<TokenBudgetConfig>;
+}
+
+export class AnalyzeService {
+  /**
+   * Analyze a URL and generate a professional prompt
+   *
+   * @param options - Analysis options
+   * @returns Pipeline result with prompt and metadata
+   */
+  async analyzeUrl(options: AnalyzeOptions): Promise<PipelineResult> {
+    return executePipeline({
+      url: options.url,
+      model: options.model,
+      tier: options.tier,
+      customBudget: options.customBudget,
+    });
+  }
+}
+
+export const analyzeService = new AnalyzeService();
+</file>
+
+<file path="analyze.validator.ts">
+import Joi from 'joi';
+
+// Gemini models
+const GEMINI_MODELS = [
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-exp',
+] as const;
+
+// OpenAI models
+const OPENAI_MODELS = [
+  'gpt-4o',
+  'gpt-4o-mini',
+  'gpt-4-turbo',
+  'gpt-4',
+  'gpt-3.5-turbo',
+  'o1',
+  'o1-mini',
+  'o1-preview',
+] as const;
+
+// All available models
+const ALL_MODELS = [...GEMINI_MODELS, ...OPENAI_MODELS];
+
+// User tiers
+const USER_TIERS = ['free', 'basic', 'pro', 'enterprise'] as const;
+
+export const analyzeUrl = {
+  body: Joi.object({
+    url: Joi.string().uri({ scheme: ['http', 'https'] }).required()
+      .messages({
+        'string.uri': 'URL must be a valid HTTP or HTTPS URL',
+        'any.required': 'URL is required',
+      }),
+    model: Joi.string().valid(...ALL_MODELS).default('gemini-1.5-flash')
+      .messages({
+        'any.only': `Model must be one of: ${ALL_MODELS.join(', ')}`,
+      }),
+    tier: Joi.string().valid(...USER_TIERS).optional()
+      .messages({
+        'any.only': `Tier must be one of: ${USER_TIERS.join(', ')}`,
+      }),
+    customBudget: Joi.object({
+      maxTokens: Joi.number().min(100).max(100000).optional(),
+      maxCSSClasses: Joi.number().min(-1).optional(),
+      maxColors: Joi.number().min(-1).optional(),
+      maxImages: Joi.number().min(-1).optional(),
+      maxSections: Joi.number().min(-1).optional(),
+      maxNavItems: Joi.number().min(-1).optional(),
+      includeCSSDetails: Joi.boolean().optional(),
+      includeAllMetadata: Joi.boolean().optional(),
+    }).optional(),
+  }),
+};
+</file>
+
+<file path="index.ts">
+export { default as analyzeRouter } from './analyze.router';
+export { analyzeService } from './analyze.service';
+</file>
+
+<file path="pipeline/analyzer.ts">
+import {
+  RawParsedDOM,
+  RawDOMNode,
+  StructuralAnalysis,
+  LayoutType,
+  ContentDensity,
+  Difficulty,
+} from './ir.types';
+
+/**
+ * Visual Characteristics Interface
+ * Deterministic visual behavior inferred from CSS properties
+ */
+export interface VisualCharacteristics {
+  isFixed: boolean;
+  isSticky: boolean;
+  isOverlay: boolean; // z-index > 100
+  hasBackdropEffect: boolean; // backdrop-filter present
+  hasElevation: boolean; // box-shadow present
+  colorRole: 'brand' | 'neutral' | 'accent' | 'unknown';
+  layoutRole: 'container' | 'grid' | 'flex-row' | 'flex-column' | 'absolute-positioned';
+}
+
+/**
+ * Structural Analyzer - 100% Deterministic, NO AI
+ * Analyzes parsed DOM tree and returns factual structural information
+ * NO semantic role assignment - that's for the LLM
+ */
+export function analyzeStructure(parsed: RawParsedDOM): StructuralAnalysis {
+  const nodeCount = parsed.totalNodes;
+  const rootNodeCount = parsed.rootNodes.length;
+  const maxDepth = calculateMaxDepth(parsed.rootNodes);
+  const layoutType = detectLayoutType(parsed.rootNodes);
+  const hasNavigation = parsed.navigation.length > 0;
+  const hasFooter = parsed.footer !== null;
+  const contentDensity = calculateContentDensity(parsed);
+  const { difficulty, difficultyReason } = calculateDifficulty(parsed, layoutType);
+
+  return {
+    nodeCount,
+    rootNodeCount,
+    maxDepth,
+    layoutType,
+    hasNavigation,
+    hasFooter,
+    contentDensity,
+    difficulty,
+    difficultyReason,
+  };
+}
+
+/**
+ * Calculate the maximum depth of the DOM tree
+ */
+function calculateMaxDepth(nodes: RawDOMNode[]): number {
+  let maxDepth = 0;
+
+  function traverse(node: RawDOMNode): void {
+    if (node.depth > maxDepth) {
+      maxDepth = node.depth;
+    }
+    for (const child of node.children) {
+      traverse(child);
+    }
+  }
+
+  for (const node of nodes) {
+    traverse(node);
+  }
+
+  return maxDepth;
+}
+
+/**
+ * Traverse all nodes in the tree and apply a callback
+ */
+function traverseTree(nodes: RawDOMNode[], callback: (node: RawDOMNode) => void): void {
+  function traverse(node: RawDOMNode): void {
+    callback(node);
+    for (const child of node.children) {
+      traverse(child);
+    }
+  }
+
+  for (const node of nodes) {
+    traverse(node);
+  }
+}
+
+/**
+ * Detect layout type based on CSS properties in the tree
+ * Uses display, grid-template-columns, flex properties
+ */
+function detectLayoutType(rootNodes: RawDOMNode[]): LayoutType {
+  let gridCount = 0;
+  let flexCount = 0;
+  let totalContainers = 0;
+
+  traverseTree(rootNodes, (node) => {
+    if (!node.isContainer) return;
+    totalContainers++;
+
+    const display = node.cssProperties['display'];
+    const gridCols = node.cssProperties['grid-template-columns'];
+
+    // Check for grid
+    if (display === 'grid' || gridCols) {
+      gridCount++;
+    }
+
+    // Check for flex
+    if (display === 'flex') {
+      flexCount++;
+    }
+
+    // Also check className patterns
+    const className = (node.className || '').toLowerCase();
+    if (className.includes('grid') || className.includes('cols-')) {
+      gridCount++;
+    }
+  });
+
+  if (totalContainers === 0) return 'single-column';
+
+  const gridRatio = gridCount / totalContainers;
+  const flexRatio = flexCount / totalContainers;
+
+  // Determine layout type based on ratios
+  if (gridRatio > 0.2) {
+    return 'grid';
+  }
+  if (flexRatio > 0.3 && gridRatio < 0.1) {
+    // Check for two-column flex layouts
+    let twoColFlex = 0;
+    traverseTree(rootNodes, (node) => {
+      if (node.cssProperties['display'] === 'flex' && node.children.length === 2) {
+        twoColFlex++;
+      }
+    });
+    if (twoColFlex > 0) {
+      return 'two-column';
+    }
+  }
+  if (gridRatio > 0.1 || flexRatio > 0.2) {
+    return 'mixed';
+  }
+
+  return 'single-column';
+}
+
+/**
+ * Calculate content density based on tree size and content
+ */
+function calculateContentDensity(parsed: RawParsedDOM): ContentDensity {
+  const textLength = parsed.rawTextContent?.length || 0;
+  const imageCount = parsed.allImages.length;
+  const formCount = parsed.allForms.length;
+  const nodeCount = parsed.totalNodes;
+  const ctaCount = parsed.ctas.length;
+
+  let score = 0;
+
+  // Text density
+  if (textLength > 3000) score += 3;
+  else if (textLength > 1500) score += 2;
+  else if (textLength > 500) score += 1;
+
+  // Image density
+  if (imageCount > 15) score += 2;
+  else if (imageCount > 5) score += 1;
+
+  // Form complexity
+  if (formCount > 2) score += 2;
+  else if (formCount > 0) score += 1;
+
+  // Node count (replaces section count)
+  if (nodeCount > 100) score += 2;
+  else if (nodeCount > 50) score += 1;
+
+  // CTA count
+  if (ctaCount > 5) score += 1;
+
+  if (score >= 7) return 'high';
+  if (score >= 4) return 'medium';
+  return 'low';
+}
+
+/**
+ * Calculate difficulty based on tree complexity
+ */
+function calculateDifficulty(
+  parsed: RawParsedDOM,
+  layoutType: LayoutType
+): { difficulty: Difficulty; difficultyReason: string } {
+  let score = 0;
+  const reasons: string[] = [];
+
+  // Node count impact
+  if (parsed.totalNodes > 100) {
+    score += 3;
+    reasons.push('many nodes');
+  } else if (parsed.totalNodes > 50) {
+    score += 2;
+    reasons.push('moderate nodes');
+  } else if (parsed.totalNodes > 20) {
+    score += 1;
+  }
+
+  // Tree depth impact
+  const maxDepth = calculateMaxDepth(parsed.rootNodes);
+  if (maxDepth > 15) {
+    score += 2;
+    reasons.push('deep nesting');
+  } else if (maxDepth > 10) {
+    score += 1;
+  }
+
+  // Layout complexity
+  if (layoutType === 'grid' || layoutType === 'mixed') {
+    score += 2;
+    reasons.push('complex layout');
+  } else if (layoutType === 'two-column') {
+    score += 1;
+  }
+
+  // Forms add complexity
+  if (parsed.allForms.length > 0) {
+    const totalFields = parsed.allForms.reduce((sum, f) => sum + f.fields.length, 0);
+    if (totalFields > 10) {
+      score += 3;
+      reasons.push('complex forms');
+    } else if (totalFields > 5) {
+      score += 2;
+      reasons.push('forms present');
+    } else {
+      score += 1;
+    }
+  }
+
+  // Navigation complexity
+  if (parsed.navigation.some(item => item.children.length > 0)) {
+    score += 1;
+    reasons.push('dropdown menus');
+  }
+
+  // Embeds add complexity
+  if (parsed.embeds.length > 0) {
+    score += 1;
+    reasons.push('embedded content');
+  }
+
+  // Multiple CTAs
+  if (parsed.ctas.length > 5) {
+    score += 1;
+  }
+
+  // Footer complexity
+  if (parsed.footer && parsed.footer.columns.length > 3) {
+    score += 1;
+    reasons.push('detailed footer');
+  }
+
+  // Determine difficulty level
+  let difficulty: Difficulty;
+  if (score >= 8) {
+    difficulty = 'hard';
+  } else if (score >= 4) {
+    difficulty = 'medium';
+  } else {
+    difficulty = 'easy';
+  }
+
+  const difficultyReason = reasons.length > 0
+    ? reasons.slice(0, 3).join(', ')
+    : difficulty === 'easy' ? 'simple structure' : 'moderate complexity';
+
+  return { difficulty, difficultyReason };
+}
+
+/**
+ * Infer visual characteristics from CSS properties
+ * 100% deterministic rule-based interpretation
+ */
+export function inferVisualCharacteristics(
+  cssProperties: Record<string, string>
+): VisualCharacteristics {
+  const result: VisualCharacteristics = {
+    isFixed: false,
+    isSticky: false,
+    isOverlay: false,
+    hasBackdropEffect: false,
+    hasElevation: false,
+    colorRole: 'unknown',
+    layoutRole: 'container'
+  };
+
+  // Position rules
+  if (cssProperties['position'] === 'fixed') {
+    result.isFixed = true;
+  }
+  if (cssProperties['position'] === 'sticky') {
+    result.isSticky = true;
+  }
+
+  // Overlay detection
+  const zIndex = parseInt(cssProperties['z-index'] || '0');
+  if (zIndex > 100) {
+    result.isOverlay = true;
+  }
+
+  // Backdrop effect
+  if (cssProperties['backdrop-filter']) {
+    result.hasBackdropEffect = true;
+  }
+
+  // Elevation
+  if (cssProperties['box-shadow']) {
+    result.hasElevation = true;
+  }
+
+  // Layout role
+  const display = cssProperties['display'];
+  if (display === 'grid') {
+    result.layoutRole = 'grid';
+  } else if (display === 'flex') {
+    const direction = cssProperties['flex-direction'];
+    result.layoutRole = direction === 'column' ? 'flex-column' : 'flex-row';
+  } else if (cssProperties['position'] === 'absolute') {
+    result.layoutRole = 'absolute-positioned';
+  }
+
+  return result;
+}
+
+export const analyzer = {
+  analyze: analyzeStructure,
+  inferVisuals: inferVisualCharacteristics,
+};
+</file>
+
+<file path="pipeline/fetcher.ts">
+import { FetchResult } from './ir.types';
+import { ApiError } from '../../../shared/utils/ApiError';
+import httpStatus from 'http-status';
+
+const MAX_HTML_SIZE = 10 * 1024 * 1024; // 10 MB
+const FETCH_TIMEOUT = 10000; // 10 seconds
+const MAX_REDIRECTS = 5;
+
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+interface FetchOptions {
+  timeout?: number;
+  maxSize?: number;
+  maxRedirects?: number;
+}
+
+export async function fetchUrl(
+  url: string,
+  options: FetchOptions = {}
+): Promise<FetchResult> {
+  const {
+    timeout = FETCH_TIMEOUT,
+    maxSize = MAX_HTML_SIZE,
+    maxRedirects = MAX_REDIRECTS
+  } = options;
+
+  // Validate URL
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid URL provided');
+  }
+
+  // Only allow http/https
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Only HTTP and HTTPS URLs are allowed');
+  }
+
+  // Create abort controller for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  let redirectCount = 0;
+  let currentUrl = url;
+  let finalResponse: Response;
+
+  try {
+    // Handle redirects manually to track count
+    while (redirectCount <= maxRedirects) {
+      const response = await fetch(currentUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+        },
+        signal: controller.signal,
+        redirect: 'manual',
+      });
+
+      // Handle redirects
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get('location');
+        if (!location) {
+          throw new ApiError(httpStatus.BAD_GATEWAY, 'Redirect without location header');
+        }
+
+        // Resolve relative URLs
+        currentUrl = new URL(location, currentUrl).toString();
+        redirectCount++;
+
+        if (redirectCount > maxRedirects) {
+          throw new ApiError(httpStatus.BAD_GATEWAY, 'Too many redirects');
+        }
+        continue;
+      }
+
+      finalResponse = response;
+      break;
+    }
+
+    // Check status codes
+    if (finalResponse!.status === 401 || finalResponse!.status === 403) {
+      throw new ApiError(httpStatus.BAD_GATEWAY, 'Page is protected (requires authentication)');
+    }
+
+    if (!finalResponse!.ok) {
+      throw new ApiError(httpStatus.BAD_GATEWAY, `Failed to fetch URL: HTTP ${finalResponse!.status}`);
+    }
+
+    // Check content type
+    const contentType = finalResponse!.headers.get('content-type') || '';
+    if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
+      throw new ApiError(httpStatus.UNPROCESSABLE_ENTITY, 'URL does not return HTML content');
+    }
+
+    // Check content length if available
+    const contentLength = finalResponse!.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > maxSize) {
+      throw new ApiError(413, `HTML content exceeds maximum size of ${maxSize / 1024 / 1024} MB`);
+    }
+
+    // Read body with size check
+    const reader = finalResponse!.body?.getReader();
+    if (!reader) {
+      throw new ApiError(httpStatus.BAD_GATEWAY, 'Failed to read response body');
+    }
+
+    const chunks: Uint8Array[] = [];
+    let totalSize = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      totalSize += value.length;
+      if (totalSize > maxSize) {
+        reader.cancel();
+        throw new ApiError(413, `HTML content exceeds maximum size of ${maxSize / 1024 / 1024} MB`);
+      }
+
+      chunks.push(value);
+    }
+
+    // Combine chunks and decode
+    const combinedChunks = new Uint8Array(totalSize);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combinedChunks.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    const html = new TextDecoder('utf-8').decode(combinedChunks);
+
+    return {
+      html,
+      finalUrl: currentUrl,
+      statusCode: finalResponse!.status,
+      contentLength: totalSize,
+    };
+
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        throw new ApiError(httpStatus.GATEWAY_TIMEOUT, `Request timed out after ${timeout / 1000} seconds`);
+      }
+      throw new ApiError(httpStatus.BAD_GATEWAY, `Failed to fetch URL: ${error.message}`);
+    }
+
+    throw new ApiError(httpStatus.BAD_GATEWAY, 'Failed to fetch URL');
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export const fetcher = {
+  fetch: fetchUrl,
+};
+</file>
+
+<file path="pipeline/index.ts">
+/**
+ * Vibe Square - Analysis Pipeline Orchestrator
+ *
+ * This is the main entry point for the URL-to-Prompt pipeline.
+ * It orchestrates all pipeline stages in sequence:
+ *
+ * 1. Fetch URL (HTTP)
+ * 2. Normalize HTML (cleanup)
+ * 3. Parse DOM (jsdom)
+ * 4. Structural Analysis (deterministic)
+ * 5. Design Interpretation (OpenAI or Gemini LLM)
+ * 6. Build IR (intermediate representation)
+ * 7. Synthesize Prompt (final output)
+ */
+
+import { fetcher } from './fetcher';
+import { normalizer, NormalizationResult } from './normalizer';
+import { parser } from './parser';
+import { analyzer } from './analyzer';
+import { interpreter, LLMModel } from './interpreter';
+import { synthesizer } from './synthesizer';
+import {
+  AnalysisResult,
+  FetchResult,
+  RawParsedDOM,
+  StructuralAnalysis,
+  DesignInterpretation,
+  IntermediateRepresentation,
+} from './ir.types';
+import {
+  UserTier,
+  TokenBudgetConfig,
+  applyTokenBudget,
+  applyCustomBudget,
+  ReducedParsedDOM,
+} from './token-budget';
+
+export interface PipelineOptions {
+  url: string;
+  model?: LLMModel;
+  tier?: UserTier;
+  customBudget?: Partial<TokenBudgetConfig>;
+}
+
+export interface PipelineDebug {
+  fetchResult: FetchResult;
+  normalizedResult: Omit<NormalizationResult, 'html'>; // Exclude HTML (too large)
+  parsedDOM: RawParsedDOM | ReducedParsedDOM;
+  structuralAnalysis: StructuralAnalysis;
+  designInterpretation: DesignInterpretation;
+  ir: IntermediateRepresentation;
+}
+
+export interface PipelineResult extends AnalysisResult {
+  processingTimeMs: number;
+  debug: PipelineDebug;
+}
+
+/**
+ * Main pipeline execution function
+ */
+export async function executePipeline(options: PipelineOptions): Promise<PipelineResult> {
+  const startTime = Date.now();
+  const { url, model = 'gemini-1.5-flash', tier, customBudget } = options;
+
+  // Step 1: Fetch URL
+  const fetchResult = await fetcher.fetch(url);
+
+  // Step 2: Normalize HTML
+  const normalizedResult = await normalizer.clean(fetchResult.html, fetchResult.finalUrl);
+
+  // Step 3: Parse DOM
+  const parsedDOM = parser.parse(normalizedResult, fetchResult.finalUrl);
+
+  // Step 3.5: Apply Token Budget (if tier or custom budget specified)
+  let finalParsedDOM: RawParsedDOM | ReducedParsedDOM = parsedDOM;
+  if (customBudget) {
+    finalParsedDOM = applyCustomBudget(parsedDOM, customBudget);
+  } else if (tier) {
+    finalParsedDOM = applyTokenBudget(parsedDOM, tier);
+  }
+
+  // Step 4: Structural Analysis (NO AI)
+  const structuralAnalysis = analyzer.analyze(finalParsedDOM as RawParsedDOM);
+
+  // Step 5: Design Interpretation (OpenAI or Gemini)
+  // const designInterpretation = await interpreter.interpret(finalParsedDOM as RawParsedDOM, structuralAnalysis, model);
+
+  // // Step 6: Build Intermediate Representation
+  // const ir = synthesizer.buildIR(fetchResult.finalUrl, finalParsedDOM as RawParsedDOM, structuralAnalysis, designInterpretation);
+
+  // Step 7: Synthesize Prompt
+  // const prompt = synthesizer.synthesize(ir);
+
+  const processingTimeMs = Date.now() - startTime;
+
+  // Build result
+  const result: AnalysisResult | any = {
+    // prompt,
+    // ir,
+    metadata: {
+      sourceUrl: fetchResult.finalUrl,
+      nodesFound: structuralAnalysis.nodeCount,
+      layoutType: structuralAnalysis.layoutType,
+      difficulty: structuralAnalysis.difficulty,
+      language: finalParsedDOM.language,
+      processingTimeMs,
+    },
+  };
+
+  return {
+    ...result,
+    processingTimeMs,
+    debug: {
+      fetchResult,
+      normalizedResult: {
+        extractedFonts: normalizedResult.extractedFonts,
+        extractedEmbeds: normalizedResult.extractedEmbeds,
+        extractedCSS: normalizedResult.extractedCSS,
+      },
+      parsedDOM: finalParsedDOM,
+      structuralAnalysis,
+      // designInterpretation,
+      // ir,
+    },
+  };
+}
+
+// Export all pipeline modules for direct access if needed
+export { fetcher } from './fetcher';
+export { normalizer } from './normalizer';
+export { parser } from './parser';
+export { analyzer } from './analyzer';
+export { interpreter } from './interpreter';
+export { synthesizer } from './synthesizer';
+export * from './ir.types';
+
+// Export token budget utilities
+export {
+  UserTier,
+  TokenBudgetConfig,
+  TIER_CONFIGS,
+  applyTokenBudget,
+  applyCustomBudget,
+  estimateTokens,
+} from './token-budget';
+export type { ReducedParsedDOM } from './token-budget';
+
+// Export model types and utilities
+export type {
+  GeminiModel,
+  OpenAIModel,
+  LLMModel,
+  LLMProvider,
+} from './interpreter';
+
+export {
+  GEMINI_MODELS,
+  OPENAI_MODELS,
+  ALL_MODELS,
+  getProvider,
+  isValidModel,
+} from './interpreter';
+</file>
+
+<file path="pipeline/interpreter.ts">
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
+import { env } from '../../../config/env';
+import {
+  RawParsedDOM,
+  RawDOMNode,
+  StructuralAnalysis,
+  DesignInterpretation,
+  AnimationType,
+} from './ir.types';
+import { ApiError } from '../../../shared/utils/ApiError';
+import httpStatus from 'http-status';
+
+// ============ Model Types ============
+
+// Gemini models
+export const GEMINI_MODELS = [
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-exp',
+] as const;
+
+// OpenAI models
+export const OPENAI_MODELS = [
+  'gpt-4o',
+  'gpt-4o-mini',
+  'gpt-4-turbo',
+  'gpt-4',
+  'gpt-3.5-turbo',
+  'o1',
+  'o1-mini',
+  'o1-preview',
+] as const;
+
+export type GeminiModel = typeof GEMINI_MODELS[number];
+export type OpenAIModel = typeof OPENAI_MODELS[number];
+export type LLMModel = GeminiModel | OpenAIModel;
+
+// Provider detection
+export type LLMProvider = 'gemini' | 'openai';
+
+export function getProvider(model: LLMModel): LLMProvider {
+  if (OPENAI_MODELS.includes(model as OpenAIModel)) {
+    return 'openai';
+  }
+  return 'gemini';
+}
+
+export function isValidModel(model: string): model is LLMModel {
+  return GEMINI_MODELS.includes(model as GeminiModel) ||
+         OPENAI_MODELS.includes(model as OpenAIModel);
+}
+
+// Default model
+const DEFAULT_MODEL: LLMModel = 'gemini-1.5-flash';
+
+// Token limits
+const MAX_OUTPUT_TOKENS = 2048;  // Increased for hierarchical output
+const MAX_INPUT_CHARS = 80000;  // Increased for tree structure
+
+// ============ System Prompt ============
+
+const SYSTEM_PROMPT = `You are a Semantic DOM Interpreter.
+
+You receive a HIERARCHICAL DOM TREE representation with full CSS properties.
+Your task is to assign semantic ROLES to nodes based on visual behavior.
+
+HTML tag names are NOT the source of truth.
+The SOURCE OF TRUTH is:
+1. CSS properties (position, display, background, z-index, etc.)
+2. Visual behavior inferred from CSS
+3. Layout structure (grid, flex, columns)
+4. Content grouping patterns
+
+CRITICAL RULES:
+- NEVER classify nodes based only on tag name
+- Use CSS properties to infer visual behavior
+- Use the "order" field to identify nodes in your response
+- Assign roles to SIGNIFICANT nodes only (containers with visual identity)
+- Skip trivial nodes (empty divs, wrapper elements with no CSS)
+
+NODE ROLE EXAMPLES:
+- order 0: header (position: fixed, z-index high)
+- order 5: hero (large padding, prominent background, contains CTA)
+- order 12: features-grid (display: grid, contains cards)
+- order 25: testimonials (contains quotes, avatar images)
+- order 40: footer (bottom of page, contains links/copyright)
+
+CSS INTERPRETATION RULES:
+- position: fixed/sticky → likely Header / Nav / Overlay
+- background-color or gradient → visual block identity
+- z-index > 10 → layered importance
+- display: grid/flex with multiple children → section with cards
+- padding > 40px → major section boundary
+- max-width with margin: auto → centered content container
+
+OUTPUT REQUIREMENTS:
+- Output ONLY valid JSON
+- Include only SIGNIFICANT nodes (not every node)
+- Each node interpretation must include:
+  - nodeOrder (number matching the "order" field from input)
+  - inferredRole (e.g. header, hero, features, testimonials, pricing, cta, footer)
+  - confidence ("high" | "medium" | "low")
+  - cssSignalsUsed (array of CSS properties that influenced the decision)
+  - visualDescription (factual description based on CSS, not imagination)
+
+Expected JSON structure:
+{
+  "nodes": [
+    {
+      "nodeOrder": 0,
+      "inferredRole": "header",
+      "confidence": "high",
+      "cssSignalsUsed": ["position: fixed", "z-index: 1000"],
+      "visualDescription": "Fixed navigation bar at top of page"
+    },
+    {
+      "nodeOrder": 5,
+      "inferredRole": "hero",
+      "confidence": "high",
+      "cssSignalsUsed": ["padding", "background", "height"],
+      "visualDescription": "Large hero section with centered content"
+    }
+  ],
+  "layoutIntent": "Marketing landing page with hero, features, and CTA",
+  "hierarchy": "Header → Hero → Features → Testimonials → CTA → Footer",
+  "emphasis": ["hero", "cta"],
+  "suggestedAnimations": ["fade"],
+  "responsiveHints": ["Grid collapses to single column on mobile"]
+}
+
+FINAL GOAL:
+Produce semantic role assignments for significant visual nodes based on CSS behavior.`;
+
+
+// ============ Main Interpret Function ============
+
+export async function interpretDesign(
+  parsed: RawParsedDOM,
+  structural: StructuralAnalysis,
+  model: LLMModel = DEFAULT_MODEL
+): Promise<DesignInterpretation> {
+  const provider = getProvider(model);
+  const summary = buildStructuredSummary(parsed, structural);
+
+  // Check input size limit
+  if (summary.length > MAX_INPUT_CHARS) {
+    throw new ApiError(413, 'Page content too large for analysis. Please try a simpler page.');
+  }
+
+  if (provider === 'openai') {
+    return interpretWithOpenAI(summary, model as OpenAIModel);
+  } else {
+    return interpretWithGemini(summary, model as GeminiModel);
+  }
+}
+
+// ============ OpenAI Implementation ============
+
+async function interpretWithOpenAI(
+  summary: string,
+  model: OpenAIModel
+): Promise<DesignInterpretation> {
+  if (!env.OPENAI_API_KEY) {
+    throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, 'OpenAI API key not configured');
+  }
+
+  const openai = new OpenAI({
+    apiKey: env.OPENAI_API_KEY,
+  });
+
+  try {
+    const response = await openai.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: `Analyze this DOM tree and provide node interpretations:\n\n${summary}` }
+      ],
+      max_tokens: MAX_OUTPUT_TOKENS,
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
+    });
+
+    const text = response.choices[0]?.message?.content || '';
+    return parseInterpretationResponse(text);
+
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    if (error instanceof Error) {
+      if (error.message.includes('rate') || error.message.includes('quota')) {
+        throw new ApiError(httpStatus.TOO_MANY_REQUESTS, 'OpenAI rate limit exceeded. Please try again later.');
+      }
+      if (error.message.includes('API key') || error.message.includes('authentication')) {
+        throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, 'Invalid OpenAI API key');
+      }
+      throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, `Design interpretation failed: ${error.message}`);
+    }
+
+    throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, 'Design interpretation failed');
+  }
+}
+
+// ============ Gemini Implementation ============
+
+async function interpretWithGemini(
+  summary: string,
+  model: GeminiModel
+): Promise<DesignInterpretation> {
+  if (!env.GOOGLE_AI_KEY) {
+    throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, 'Google AI API key not configured');
+  }
+
+  const genAI = new GoogleGenerativeAI(env.GOOGLE_AI_KEY);
+  const generativeModel = genAI.getGenerativeModel({
+    model,
+    generationConfig: {
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+    },
+  });
+
+  try {
+    const result = await generativeModel.generateContent([
+      { text: SYSTEM_PROMPT },
+      { text: `Analyze this DOM tree and provide node interpretations:\n\n${summary}` }
+    ]);
+
+    const response = result.response;
+    const text = response.text();
+
+    return parseInterpretationResponse(text);
+
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    if (error instanceof Error) {
+      if (error.message.includes('quota') || error.message.includes('rate')) {
+        throw new ApiError(httpStatus.TOO_MANY_REQUESTS, 'Gemini rate limit exceeded. Please try again later.');
+      }
+      if (error.message.includes('API key')) {
+        throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, 'Invalid Google AI API key');
+      }
+      throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, `Design interpretation failed: ${error.message}`);
+    }
+
+    throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, 'Design interpretation failed');
+  }
+}
+
+// ============ Helper Functions ============
+
+/**
+ * Build a hierarchical summary of the DOM tree for LLM interpretation
+ */
+function buildStructuredSummary(parsed: RawParsedDOM, structural: StructuralAnalysis): string {
+  const lines: string[] = [];
+
+  // Page metadata
+  lines.push('## Page Metadata');
+  lines.push(`- Title: ${parsed.metadata.title || 'N/A'}`);
+  lines.push(`- Description: ${parsed.metadata.description || 'N/A'}`);
+  lines.push(`- Language: ${parsed.language}`);
+  lines.push('');
+
+  // Structural analysis
+  lines.push('## Structural Analysis');
+  lines.push(`- Total Nodes: ${structural.nodeCount}`);
+  lines.push(`- Root Nodes: ${structural.rootNodeCount}`);
+  lines.push(`- Max Depth: ${structural.maxDepth}`);
+  lines.push(`- Layout Type: ${structural.layoutType}`);
+  lines.push(`- Has Navigation: ${structural.hasNavigation}`);
+  lines.push(`- Has Footer: ${structural.hasFooter}`);
+  lines.push(`- Difficulty: ${structural.difficulty}`);
+  lines.push('');
+
+  // DOM Tree - Hierarchical representation
+  lines.push('## DOM Tree');
+  lines.push('Format: [order] <tag> depth=N | CSS: key properties | text preview');
+  lines.push('');
+
+  // Traverse and build tree representation
+  for (const node of parsed.rootNodes) {
+    buildNodeSummary(node, lines, 0);
+  }
+  lines.push('');
+
+  // Navigation
+  if (parsed.navigation.length > 0) {
+    lines.push('## Navigation');
+    lines.push(`Items: ${parsed.navigation.map(item => item.text).join(', ')}`);
+    lines.push('');
+  }
+
+  // Forms
+  if (parsed.allForms.length > 0) {
+    lines.push('## Forms');
+    parsed.allForms.forEach((form, i) => {
+      lines.push(`Form ${i + 1}: ${form.fields.length} fields`);
+      form.fields.forEach(field => {
+        lines.push(`  - ${field.label || field.name}: ${field.type}${field.required ? ' (required)' : ''}`);
+      });
+      if (form.submitButtonText) {
+        lines.push(`  - Submit: "${form.submitButtonText}"`);
+      }
+    });
+    lines.push('');
+  }
+
+  // CTAs
+  if (parsed.ctas.length > 0) {
+    lines.push('## CTAs');
+    parsed.ctas.forEach(cta => {
+      lines.push(`- "${cta.text}" [${cta.type}] in ${cta.location}`);
+    });
+    lines.push('');
+  }
+
+  // Footer
+  if (parsed.footer) {
+    lines.push('## Footer');
+    lines.push(`- Columns: ${parsed.footer.columns.length}`);
+    if (parsed.footer.copyright) {
+      lines.push(`- Copyright: ${parsed.footer.copyright}`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Build summary for a single node and its children
+ */
+function buildNodeSummary(node: RawDOMNode, lines: string[], indent: number): void {
+  const indentStr = '  '.repeat(indent);
+  const idStr = node.id ? `#${node.id}` : '';
+  const classStr = node.className ? `.${node.className.split(' ')[0]}` : '';
+
+  // Extract key CSS properties for summary
+  const keyProps: string[] = [];
+  const css = node.cssProperties;
+
+  if (css['position'] && css['position'] !== 'static') {
+    keyProps.push(`pos:${css['position']}`);
+  }
+  if (css['display']) {
+    keyProps.push(`disp:${css['display']}`);
+  }
+  if (css['z-index']) {
+    keyProps.push(`z:${css['z-index']}`);
+  }
+  if (css['background-color'] || css['background']) {
+    keyProps.push(`bg:${css['background-color'] || css['background']?.slice(0, 20)}`);
+  }
+  if (css['padding']) {
+    keyProps.push(`pad:${css['padding']}`);
+  }
+  if (css['grid-template-columns']) {
+    keyProps.push(`grid-cols`);
+  }
+  if (css['flex-direction']) {
+    keyProps.push(`flex-${css['flex-direction']}`);
+  }
+
+  const cssStr = keyProps.length > 0 ? `| CSS: ${keyProps.join(', ')}` : '';
+
+  // Text preview (truncated)
+  const textPreview = node.textContent
+    ? ` | "${node.textContent.slice(0, 50).replace(/\s+/g, ' ')}${node.textContent.length > 50 ? '...' : ''}"`
+    : '';
+
+  // Images count
+  const imgStr = node.images.length > 0 ? ` | imgs:${node.images.length}` : '';
+
+  // Build the line
+  lines.push(`${indentStr}[${node.order}] <${node.tag}${idStr}${classStr}> depth=${node.depth} ${cssStr}${imgStr}${textPreview}`);
+
+  // Recursively process children (limit depth for summary)
+  if (node.isContainer && indent < 5) {  // Limit indent for readability
+    for (const child of node.children) {
+      buildNodeSummary(child, lines, indent + 1);
+    }
+  } else if (node.children.length > 0) {
+    lines.push(`${indentStr}  ... ${node.children.length} children (depth limit)`);
+  }
+}
+
+/**
+ * Parse LLM response into DesignInterpretation
+ */
+function parseInterpretationResponse(text: string): DesignInterpretation {
+  // Try to extract JSON from response
+  let jsonStr = text.trim();
+
+  // Handle markdown code blocks
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (jsonMatch) {
+    jsonStr = jsonMatch[1].trim();
+  }
+
+  try {
+    const parsed = JSON.parse(jsonStr);
+
+    // Validate required fields
+    if (!parsed.nodes || !Array.isArray(parsed.nodes)) {
+      throw new Error('Missing or invalid "nodes" array in LLM response');
+    }
+    if (!parsed.layoutIntent || !parsed.hierarchy) {
+      throw new Error('Missing required fields (layoutIntent, hierarchy) in LLM response');
+    }
+
+    // Parse nodes with validation
+    const nodes = parsed.nodes.map((n: any, i: number) => {
+      if (!n.inferredRole || !n.confidence || !n.visualDescription || n.nodeOrder === undefined) {
+        throw new Error(`Node ${i} missing required fields: ${JSON.stringify(n)}`);
+      }
+      return {
+        nodeOrder: Number(n.nodeOrder) || 0,
+        inferredRole: String(n.inferredRole || 'unknown'),
+        confidence: (n.confidence === 'high' || n.confidence === 'medium' || n.confidence === 'low')
+          ? n.confidence
+          : 'low',
+        cssSignalsUsed: Array.isArray(n.cssSignalsUsed) ? n.cssSignalsUsed.map(String) : [],
+        visualDescription: String(n.visualDescription || 'No description provided'),
+      };
+    });
+
+    // Validate and sanitize animations
+    const validAnimations: AnimationType[] = ['fade', 'slide', 'reveal'];
+    const suggestedAnimations = (parsed.suggestedAnimations || [])
+      .filter((a: string) => validAnimations.includes(a as AnimationType)) as AnimationType[];
+
+    return {
+      nodes,
+      layoutIntent: String(parsed.layoutIntent),
+      hierarchy: String(parsed.hierarchy),
+      emphasis: Array.isArray(parsed.emphasis) ? parsed.emphasis.map(String) : [],
+      suggestedAnimations,
+      responsiveHints: Array.isArray(parsed.responsiveHints) ? parsed.responsiveHints.map(String) : [],
+    };
+
+  } catch (error) {
+    throw new ApiError(httpStatus.SERVICE_UNAVAILABLE,
+      `Failed to interpret design: Invalid LLM response - ${error instanceof Error ? error.message : 'Parse error'}`);
+  }
+}
+
+// ============ Export ============
+
+export const interpreter = {
+  interpret: interpretDesign,
+};
+
+// Export all models for easy access
+export const ALL_MODELS = [...GEMINI_MODELS, ...OPENAI_MODELS] as const;
+</file>
+
+<file path="pipeline/ir.types.ts">
+// Intermediate Representation Types for Vibe Square Pipeline
+
+// ============ Constants ============
+export const MAX_DOM_DEPTH = 20;
+
+// ============ Fetch Types ============
+export interface FetchResult {
+  html: string;
+  finalUrl: string;
+  statusCode: number;
+  contentLength: number;
+}
+
+// ============ Parser Types ============
+
+/**
+ * Raw DOM Node - No semantic interpretation
+ * Preserves full hierarchy and CSS properties
+ *
+ * CRITICAL RULES:
+ * - NO classification (no sections, headers, heroes, nav, footer)
+ * - NO semantic inference
+ * - NO CSS filtering
+ * - HTML + CSS are the ONLY source of truth
+ */
+export interface RawDOMNode {
+  // Identity
+  tag: string;
+  order: number;              // Explicit DOM order (global counter)
+  id?: string;                // HTML id attribute
+  className?: string;         // Full class string
+  attributes?: Record<string, string>;  // All HTML attributes
+
+  // Hierarchy
+  depth: number;              // Current depth level (0 = root)
+  isContainer: boolean;       // Has child elements
+  children: RawDOMNode[];     // Full nested children (max depth: 20)
+
+  // Content
+  textContent: string;        // Full text content (not truncated)
+
+  // CSS (NO FILTERING - classes + inline merged)
+  cssProperties: Record<string, string>;  // ALL properties merged
+
+  // Media
+  images: ImageInfo[];        // Images in this node (src, data-src)
+}
+
+export interface NavItem {
+  text: string;
+  href?: string;
+  isButton: boolean;
+  children: NavItem[];
+}
+
+export interface FormField {
+  name: string;
+  type: string;
+  label?: string;
+  placeholder?: string;
+  required: boolean;
+  options?: string[]; // for select/radio
+}
+
+export interface FormInfo {
+  id?: string;
+  action?: string;
+  method: string;
+  fields: FormField[];
+  submitButtonText?: string;
+}
+
+export interface ImageInfo {
+  url: string;
+  alt?: string;
+}
+
+export interface ColorInfo {
+  value: string;
+  property: string; // background-color, color, border-color
+  frequency: number;
+}
+
+export interface FontInfo {
+  family: string;
+  source: 'google' | 'system' | 'custom';
+  url?: string;
+}
+
+export interface CTAInfo {
+  text: string;
+  href?: string;
+  type: 'primary' | 'secondary' | 'link';
+  location: string; // hero, header, section, footer
+}
+
+export interface FooterColumn {
+  heading?: string;
+  links: { text: string; href?: string }[];
+}
+
+export interface FooterInfo {
+  columns: FooterColumn[];
+  copyright?: string;
+  socialLinks: SocialLink[];
+}
+
+export interface SocialLink {
+  platform: 'facebook' | 'twitter' | 'instagram' | 'linkedin' | 'youtube' | 'github' | 'tiktok' | 'other';
+  url: string;
+}
+
+export interface EmbedInfo {
+  type: 'video' | 'map' | 'widget' | 'unknown';
+  platform?: string; // youtube, vimeo, google-maps
+  url?: string;
+}
+
+export interface PageMetadata {
+  title?: string;
+  description?: string;
+  ogTags: Record<string, string>;
+  favicon?: string;
+}
+
+export interface CSSClassInfo {
+  className: string;
+  properties: Record<string, string>; // property: value pairs
+  mediaQuery?: string; // e.g., '@media (max-width: 768px)'
+}
+
+export interface CSSInfo {
+  gridColumns: number | undefined;
+  flexColumns: number | undefined;
+  breakpoints: string[];
+  hasResponsiveGrid: boolean;
+  classes: CSSClassInfo[]; // Extracted CSS classes with their properties
+}
+
+/**
+ * Raw Parsed DOM - Full hierarchical DOM representation
+ * No semantic interpretation - consumed by LLM for role assignment
+ */
+export interface RawParsedDOM {
+  // Full DOM tree
+  rootNodes: RawDOMNode[];    // Top-level nodes (body children)
+  totalNodes: number;         // Total count of all nodes
+
+  // Global data (for convenience)
+  allImages: ImageInfo[];
+  allForms: FormInfo[];
+  navigation: NavItem[];
+  fonts: FontInfo[];
+  colors: ColorInfo[];
+  ctas: CTAInfo[];
+  footer: FooterInfo | null;
+  socialLinks: SocialLink[];
+  embeds: EmbedInfo[];
+
+  // Metadata
+  metadata: PageMetadata;
+  language: string;
+  rawTextContent: string;
+
+  // Raw CSS classes
+  cssInfo: CSSInfo;
+}
+
+// ============ Analyzer Types ============
+export type LayoutType = 'single-column' | 'two-column' | 'grid' | 'mixed';
+export type ContentDensity = 'low' | 'medium' | 'high';
+export type Difficulty = 'easy' | 'medium' | 'hard';
+
+export interface StructuralAnalysis {
+  nodeCount: number;         // Total nodes in tree
+  rootNodeCount: number;     // Top-level nodes
+  maxDepth: number;          // Deepest nesting level
+  layoutType: LayoutType;
+  hasNavigation: boolean;
+  hasFooter: boolean;
+  contentDensity: ContentDensity;
+  difficulty: Difficulty;
+  difficultyReason: string;
+}
+
+// ============ Interpreter Types ============
+export type AnimationType = 'fade' | 'slide' | 'reveal';
+
+/**
+ * Node Interpretation - LLM assigns roles to RawDOMNodes
+ */
+export interface NodeInterpretation {
+  nodeOrder: number;         // Maps to RawDOMNode.order
+  inferredRole: string;      // "hero", "features", "pricing", "unknown", etc.
+  confidence: "high" | "medium" | "low";
+  cssSignalsUsed: string[];  // CSS properties that influenced the decision
+  visualDescription: string; // Based on layout + CSS, not imagination
+}
+
+export interface DesignInterpretation {
+  nodes: NodeInterpretation[];  // Per-node analysis
+  layoutIntent: string;
+  hierarchy: string;
+  emphasis: string[];
+  suggestedAnimations: AnimationType[];
+  responsiveHints: string[];
+}
+
+// ============ IR (Intermediate Representation) ============
+export interface IRNode {
+  order: number;
+  tag: string;
+  type: string; // hero, features, testimonials, pricing, cta, etc. (from LLM)
+  description: string;
+  cssProperties: Record<string, string>; // Preserved CSS for final prompt
+  depth: number;
+  isContainer: boolean;
+  childCount: number;
+  roleConfidence: "high" | "medium" | "low";  // From LLM interpretation
+  images: ImageInfo[];  // Images in this node
+}
+
+export interface LayoutInfo {
+  type: LayoutType;
+  maxWidth?: string;
+  hasGrid: boolean;
+  columnCount?: number;
+}
+
+export interface ComponentInfo {
+  type: string;
+  description: string;
+  location: string;
+}
+
+export interface NavigationInfo {
+  position: 'top' | 'side' | 'bottom' | null;  // null = cannot determine from HTML alone
+  style: 'fixed' | 'sticky' | 'static' | null;  // null = cannot determine from HTML alone
+  items: NavItem[];
+  hasMobileMenu?: boolean; // Only set if detected in HTML
+}
+
+export interface MotionIntent {
+  element: string;
+  animation: AnimationType;
+  trigger: 'load' | 'scroll' | 'hover' | null;  // null = cannot determine from HTML alone
+}
+
+export interface IntermediateRepresentation {
+  sourceUrl: string;
+  nodes: IRNode[];           // Flattened nodes with LLM interpretations
+  layout: LayoutInfo;
+  components: ComponentInfo[];
+  navigation: NavigationInfo | null;
+  forms: FormInfo[];
+  ctas: CTAInfo[];
+  footer: FooterInfo | null;
+  embeds: EmbedInfo[];
+  colors: ColorInfo[];
+  fonts: FontInfo[];
+  motionIntent: MotionIntent[];
+  metadata: {
+    title: string;
+    description: string;
+    ogTags: Record<string, string>;
+    language: string;
+    difficulty: Difficulty;
+    difficultyReason: string;
+  };
+}
+
+// ============ Final Output Types ============
+export interface AnalysisResult {
+  prompt: string;
+  ir: IntermediateRepresentation;
+  metadata: {
+    sourceUrl: string;
+    nodesFound: number;
+    layoutType: LayoutType;
+    difficulty: Difficulty;
+    language: string;
+    processingTimeMs: number;
+  };
+}
+</file>
+
+<file path="pipeline/normalizer.ts">
+import { JSDOM } from 'jsdom';
+import { FontInfo, EmbedInfo, CSSInfo, CSSClassInfo } from './ir.types';
+
+export interface NormalizationResult {
+  html: string;
+  extractedFonts: FontInfo[];
+  extractedEmbeds: EmbedInfo[];
+  extractedCSS: CSSInfo;
+}
+
+// Inline event handlers to remove
+const EVENT_HANDLERS = [
+  'onclick', 'ondblclick', 'onmousedown', 'onmouseup', 'onmouseover', 'onmouseout', 'onmousemove',
+  'onkeydown', 'onkeyup', 'onkeypress',
+  'onfocus', 'onblur', 'onchange', 'onsubmit', 'onreset',
+  'onload', 'onunload', 'onerror', 'onresize', 'onscroll',
+  'ondragstart', 'ondrag', 'ondragend', 'ondragenter', 'ondragleave', 'ondragover', 'ondrop',
+  'ontouchstart', 'ontouchmove', 'ontouchend', 'ontouchcancel',
+  'oncontextmenu', 'onwheel', 'oninput', 'oninvalid', 'onsearch', 'onselect',
+];
+
+// Tags to completely remove
+const REMOVE_TAGS = ['script', 'noscript', 'style'];
+
+// ============ CSS Extraction Functions ============
+
+function detectGridColumns(css: string): number | undefined {
+  // Match: grid-template-columns: repeat(3, 1fr)
+  const repeatMatch = css.match(/grid-template-columns:\s*repeat\((\d+)/i);
+  if (repeatMatch) return parseInt(repeatMatch[1]);
+
+  // Match: grid-template-columns: 1fr 1fr 1fr
+  const frMatch = css.match(/grid-template-columns:\s*((?:[\d.]+fr\s*)+)/i);
+  if (frMatch) {
+    return frMatch[1].trim().split(/\s+/).length;
+  }
+
+  // Match: grid-template-columns: 200px 200px 200px
+  const pxMatch = css.match(/grid-template-columns:\s*((?:\d+px\s*)+)/i);
+  if (pxMatch) {
+    return pxMatch[1].trim().split(/\s+/).length;
+  }
+
+  return undefined;
+}
+
+function detectFlexColumns(css: string): number | undefined {
+  // Match: flex-basis: 33.33%
+  const basisMatch = css.match(/flex-basis:\s*([\d.]+)%/i);
+  if (basisMatch) {
+    const percent = parseFloat(basisMatch[1]);
+    if (percent > 0 && percent <= 50) return Math.round(100 / percent);
+  }
+
+  // Match: width: calc(100%/3) or width: 33.33%
+  const widthMatch = css.match(/width:\s*(?:calc\(100%\s*\/\s*(\d+)\)|([\d.]+)%)/i);
+  if (widthMatch) {
+    if (widthMatch[1]) return parseInt(widthMatch[1]);
+    if (widthMatch[2]) {
+      const percent = parseFloat(widthMatch[2]);
+      if (percent > 0 && percent <= 50) return Math.round(100 / percent);
+    }
+  }
+
+  return undefined;
+}
+
+function detectBreakpoints(css: string): string[] {
+  const breakpoints: string[] = [];
+  const mediaMatches = css.matchAll(/@media[^{]*\((?:max|min)-width:\s*(\d+)px\)/gi);
+  for (const match of mediaMatches) {
+    breakpoints.push(match[1] + 'px');
+  }
+  return [...new Set(breakpoints)].sort((a, b) => parseInt(a) - parseInt(b));
+}
+
+function detectResponsiveGrid(css: string): boolean {
+  // Check if grid-template-columns exists inside a media query
+  return /@media[^{]*\{[^}]*grid-template-columns/i.test(css);
+}
+
+function extractCSSClasses(css: string): CSSClassInfo[] {
+  const classes: CSSClassInfo[] = [];
+  const processedClasses = new Set<string>();
+
+  // Extract classes from regular CSS (outside media queries)
+  const classRegex = /\.([a-zA-Z0-9_-]+)\s*\{([^}]+)\}/g;
+  let match;
+
+  while ((match = classRegex.exec(css)) !== null) {
+    const className = match[1];
+    const propertiesBlock = match[2];
+
+    // Skip if already processed
+    if (processedClasses.has(className)) continue;
+    processedClasses.add(className);
+
+    const properties: Record<string, string> = {};
+
+    // Extract property-value pairs
+    const propRegex = /([a-z-]+)\s*:\s*([^;]+);?/gi;
+    let propMatch;
+
+    while ((propMatch = propRegex.exec(propertiesBlock)) !== null) {
+      const property = propMatch[1].trim();
+      const value = propMatch[2].trim();
+      properties[property] = value;
+    }
+
+    if (Object.keys(properties).length > 0) {
+      classes.push({
+        className,
+        properties,
+      });
+    }
+  }
+
+  // Extract classes from media queries
+  const mediaQueryRegex = /@media\s*([^{]+)\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/g;
+  let mediaMatch;
+
+  while ((mediaMatch = mediaQueryRegex.exec(css)) !== null) {
+    const mediaQuery = mediaMatch[1].trim();
+    const mediaContent = mediaMatch[2];
+
+    const mediaClassRegex = /\.([a-zA-Z0-9_-]+)\s*\{([^}]+)\}/g;
+    let mediaClassMatch;
+
+    while ((mediaClassMatch = mediaClassRegex.exec(mediaContent)) !== null) {
+      const className = mediaClassMatch[1];
+      const propertiesBlock = mediaClassMatch[2];
+
+      const properties: Record<string, string> = {};
+
+      const propRegex = /([a-z-]+)\s*:\s*([^;]+);?/gi;
+      let propMatch;
+
+      while ((propMatch = propRegex.exec(propertiesBlock)) !== null) {
+        const property = propMatch[1].trim();
+        const value = propMatch[2].trim();
+        properties[property] = value;
+      }
+
+      if (Object.keys(properties).length > 0) {
+        classes.push({
+          className,
+          properties,
+          mediaQuery: `@media ${mediaQuery}`,
+        });
+      }
+    }
+  }
+
+  return classes;
+}
+
+async function extractCSSInfo(document: Document, baseUrl: string): Promise<CSSInfo> {
+  let allCSS = '';
+
+  // 1. Extract from <style> tags
+  const styleTags = document.querySelectorAll('style');
+  styleTags.forEach(style => {
+    allCSS += style.textContent || '';
+  });
+
+  // 2. Fetch external CSS files from <link> tags
+  const linkTags = document.querySelectorAll('link[rel="stylesheet"]');
+  const cssPromises: Promise<string>[] = [];
+
+  linkTags.forEach(link => {
+    const href = link.getAttribute('href');
+    if (!href) return;
+
+    // Resolve relative URLs
+    let cssUrl: string;
+    try {
+      cssUrl = new URL(href, baseUrl).toString();
+    } catch {
+      return; // Skip invalid URLs
+    }
+
+    // Fetch CSS file
+    const cssPromise = fetch(cssUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+      signal: AbortSignal.timeout(5000), // 5 second timeout
+    })
+      .then(res => {
+        if (!res.ok) return '';
+        return res.text();
+      })
+      .catch(() => ''); // Ignore fetch errors for individual CSS files
+
+    cssPromises.push(cssPromise);
+  });
+
+  // Wait for all CSS files (max 10 files to avoid performance issues)
+  const externalCSS = await Promise.all(cssPromises.slice(0, 10));
+  allCSS += ' ' + externalCSS.join(' ');
+
+  // 3. Also check inline styles in elements for grid/flex patterns
+  const elementsWithStyle = document.querySelectorAll('[style*="grid"], [style*="flex"]');
+  elementsWithStyle.forEach(el => {
+    const style = el.getAttribute('style');
+    if (style) {
+      allCSS += ' ' + style;
+    }
+  });
+
+  return {
+    gridColumns: detectGridColumns(allCSS),
+    flexColumns: detectFlexColumns(allCSS),
+    breakpoints: detectBreakpoints(allCSS),
+    hasResponsiveGrid: detectResponsiveGrid(allCSS),
+    classes: extractCSSClasses(allCSS),
+  };
+}
+
+// ============ Main Normalization Function ============
+
+export async function normalizeHtml(rawHtml: string, baseUrl: string): Promise<NormalizationResult> {
+  const dom = new JSDOM(rawHtml);
+  const document = dom.window.document;
+
+  const extractedFonts: FontInfo[] = [];
+  const extractedEmbeds: EmbedInfo[] = [];
+
+  // Extract Google Fonts before removing link tags
+  const fontLinks = document.querySelectorAll('link[href*="fonts.googleapis.com"], link[href*="fonts.gstatic.com"]');
+  fontLinks.forEach(link => {
+    const href = link.getAttribute('href');
+    if (href) {
+      // Parse Google Fonts URL to extract font families
+      const familyMatch = href.match(/family=([^&]+)/);
+      if (familyMatch) {
+        const families = familyMatch[1].split('|');
+        families.forEach(family => {
+          const fontName = family.split(':')[0].replace(/\+/g, ' ');
+          extractedFonts.push({
+            family: fontName,
+            source: 'google',
+            url: href,
+          });
+        });
+      }
+    }
+  });
+
+  // Extract embeds before removing iframes
+  const iframes = document.querySelectorAll('iframe');
+  iframes.forEach(iframe => {
+    const src = iframe.getAttribute('src') || '';
+    let embedInfo: EmbedInfo;
+
+    if (src.includes('youtube.com') || src.includes('youtu.be')) {
+      embedInfo = { type: 'video', platform: 'youtube', url: src };
+    } else if (src.includes('vimeo.com')) {
+      embedInfo = { type: 'video', platform: 'vimeo', url: src };
+    } else if (src.includes('google.com/maps') || src.includes('maps.google.com')) {
+      embedInfo = { type: 'map', platform: 'google-maps', url: src };
+    } else if (src.includes('openstreetmap.org')) {
+      embedInfo = { type: 'map', platform: 'openstreetmap', url: src };
+    } else if (src.includes('spotify.com')) {
+      embedInfo = { type: 'widget', platform: 'spotify', url: src };
+    } else if (src.includes('twitter.com') || src.includes('x.com')) {
+      embedInfo = { type: 'widget', platform: 'twitter', url: src };
+    } else if (src.includes('facebook.com')) {
+      embedInfo = { type: 'widget', platform: 'facebook', url: src };
+    } else {
+      embedInfo = { type: 'unknown', url: src };
+    }
+
+    extractedEmbeds.push(embedInfo);
+  });
+
+  // Extract CSS info BEFORE removing style tags (now async!)
+  const extractedCSS = await extractCSSInfo(document, baseUrl);
+
+  // Remove script, noscript, style tags
+  REMOVE_TAGS.forEach(tag => {
+    const elements = document.querySelectorAll(tag);
+    elements.forEach(el => el.remove());
+  });
+
+  // Remove iframes (content extracted above)
+  iframes.forEach(iframe => iframe.remove());
+
+  // Remove SVG elements (often icons/graphics that aren't needed for structure)
+  const svgs = document.querySelectorAll('svg');
+  svgs.forEach(svg => svg.remove());
+
+  // Remove inline event handlers
+  const allElements = document.querySelectorAll('*');
+  allElements.forEach(element => {
+    EVENT_HANDLERS.forEach(handler => {
+      element.removeAttribute(handler);
+    });
+    // Also remove javascript: hrefs
+    const href = element.getAttribute('href');
+    if (href && href.toLowerCase().startsWith('javascript:')) {
+      element.setAttribute('href', '#');
+    }
+  });
+
+  // Remove comments
+  const walker = document.createTreeWalker(
+    document.documentElement,
+    128, // NodeFilter.SHOW_COMMENT
+    null
+  );
+  const comments: Comment[] = [];
+  while (walker.nextNode()) {
+    comments.push(walker.currentNode as Comment);
+  }
+  comments.forEach(comment => comment.remove());
+
+  // Normalize whitespace in text nodes (but keep structure)
+  const textWalker = document.createTreeWalker(
+    document.documentElement,
+    4, // NodeFilter.SHOW_TEXT
+    null
+  );
+  const textNodes: Text[] = [];
+  while (textWalker.nextNode()) {
+    textNodes.push(textWalker.currentNode as Text);
+  }
+  textNodes.forEach(node => {
+    // Replace multiple whitespace with single space, but preserve line breaks for block elements
+    const normalized = node.textContent?.replace(/[ \t]+/g, ' ') || '';
+    node.textContent = normalized;
+  });
+
+  // Get the cleaned HTML
+  const cleanedHtml = dom.serialize();
+
+  return {
+    html: cleanedHtml,
+    extractedFonts,
+    extractedEmbeds,
+    extractedCSS,
+  };
+}
+
+export const normalizer = {
+  clean: normalizeHtml,
+};
+</file>
+
+<file path="pipeline/parser.ts">
+import { JSDOM } from 'jsdom';
+import {
+  RawParsedDOM,
+  RawDOMNode,
+  MAX_DOM_DEPTH,
+  NavItem,
+  FormInfo,
+  FormField,
+  ImageInfo,
+  ColorInfo,
+  CTAInfo,
+  FooterInfo,
+  FooterColumn,
+  SocialLink,
+  PageMetadata,
+  CSSClassInfo,
+} from './ir.types';
+import { NormalizationResult } from './normalizer';
+import { ApiError } from '../../../shared/utils/ApiError';
+import httpStatus from 'http-status';
+
+const MAX_ROOT_NODES = 100;  // Max top-level nodes to process
+const MIN_BODY_LENGTH = 100;
+
+// Social media platform patterns
+const SOCIAL_PATTERNS: { pattern: RegExp; platform: SocialLink['platform'] }[] = [
+  { pattern: /facebook\.com|fb\.com/i, platform: 'facebook' },
+  { pattern: /twitter\.com|x\.com/i, platform: 'twitter' },
+  { pattern: /instagram\.com/i, platform: 'instagram' },
+  { pattern: /linkedin\.com/i, platform: 'linkedin' },
+  { pattern: /youtube\.com|youtu\.be/i, platform: 'youtube' },
+  { pattern: /github\.com/i, platform: 'github' },
+  { pattern: /tiktok\.com/i, platform: 'tiktok' },
+];
+
+// CTA keywords for detecting buttons
+const CTA_KEYWORDS = [
+  'get started', 'sign up', 'subscribe', 'buy now', 'learn more', 'contact',
+  'download', 'try free', 'start', 'join', 'register', 'book', 'order',
+];
+
+/**
+ * Parse HTML into RawParsedDOM - Full hierarchical DOM representation
+ * NO semantic interpretation - just raw extraction
+ */
+export function parseHtml(
+  normalizedResult: NormalizationResult,
+  originalUrl: string
+): RawParsedDOM {
+  const dom = new JSDOM(normalizedResult.html);
+  const document = dom.window.document;
+
+  // Check for JS-only page
+  const bodyText = document.body?.textContent?.trim() || '';
+  const hasContent = !!(
+    document.querySelector('header') ||
+    document.querySelector('main') ||
+    document.querySelector('section') ||
+    document.querySelector('nav') ||
+    document.querySelector('footer') ||
+    document.querySelector('article') ||
+    document.querySelector('div')
+  );
+
+  if (bodyText.length < MIN_BODY_LENGTH && !hasContent) {
+    throw new ApiError(
+      httpStatus.UNPROCESSABLE_ENTITY,
+      'This page appears to require JavaScript to render content. Only static HTML pages are supported.'
+    );
+  }
+
+  // Extract full DOM tree - NO semantic interpretation
+  const { rootNodes, totalNodes } = extractDOMTree(
+    document.body,
+    normalizedResult.extractedCSS.classes,
+    originalUrl
+  );
+
+  // Extract global data for convenience
+  const allImages = extractImages(document, originalUrl);
+  const backgroundImages = extractBackgroundImages(
+    document,
+    normalizedResult.extractedCSS.classes,
+    originalUrl
+  );
+
+  // Merge images (deduplicate by URL)
+  const existingUrls = new Set(allImages.map(img => img.url));
+  for (const bgImg of backgroundImages) {
+    if (!existingUrls.has(bgImg.url)) {
+      allImages.push(bgImg);
+    }
+  }
+
+  const allForms = extractForms(document);
+  const navigation = extractNavigation(document);
+  const colors = extractColors(document);
+  const fonts = normalizedResult.extractedFonts;
+  const ctas = extractCTAs(document);
+  const footer = extractFooter(document);
+  const socialLinks = extractSocialLinks(document);
+  const embeds = normalizedResult.extractedEmbeds;
+  const metadata = extractMetadata(document);
+  const language = detectLanguage(document);
+  const rawTextContent = getRawTextContent(document);
+
+  return {
+    rootNodes,
+    totalNodes,
+    allImages,
+    allForms,
+    navigation,
+    fonts,
+    colors,
+    ctas,
+    footer,
+    socialLinks,
+    embeds,
+    metadata,
+    language,
+    rawTextContent,
+    cssInfo: normalizedResult.extractedCSS,
+  };
+}
+
+/**
+ * Extract ALL CSS properties from element
+ * Merges: class-based CSS + inline styles
+ * NO FILTERING - all properties preserved
+ */
+function extractAllCSSProperties(
+  element: Element,
+  extractedClasses: CSSClassInfo[]
+): Record<string, string> {
+  const mergedProperties: Record<string, string> = {};
+  const className = element.className || '';
+
+  // 1. Extract properties from CSS classes (INCLUDING media queries)
+  if (className) {
+    const classNames = className
+      .trim()
+      .split(/\s+/)
+      .filter(name => name.length > 0);
+
+    for (const name of classNames) {
+      // Match ALL classes including media query ones
+      const matches = extractedClasses.filter(
+        cssClass => cssClass.className.toLowerCase() === name.toLowerCase()
+      );
+
+      for (const cssClass of matches) {
+        for (const [property, value] of Object.entries(cssClass.properties)) {
+          // Later values override earlier ones (CSS specificity simulation)
+          mergedProperties[property] = value;
+        }
+      }
+    }
+  }
+
+  // 2. Extract inline styles (style="...") - these override class properties
+  const inlineStyle = element.getAttribute('style');
+  if (inlineStyle) {
+    // Parse inline style string
+    const styleRules = inlineStyle.split(';').filter(s => s.trim());
+    for (const rule of styleRules) {
+      const [property, ...valueParts] = rule.split(':');
+      if (property && valueParts.length > 0) {
+        const propName = property.trim().toLowerCase();
+        const propValue = valueParts.join(':').trim();
+        if (propName && propValue) {
+          mergedProperties[propName] = propValue;
+        }
+      }
+    }
+  }
+
+  return mergedProperties;
+}
+
+/**
+ * Extract full DOM tree recursively
+ * Preserves complete hierarchy up to MAX_DOM_DEPTH levels
+ */
+function extractDOMTree(
+  body: Element,
+  extractedClasses: CSSClassInfo[],
+  baseUrl: string
+): { rootNodes: RawDOMNode[]; totalNodes: number } {
+  const rootNodes: RawDOMNode[] = [];
+  const orderCounter = { value: 0 };
+
+  // Process direct children of body
+  const children = Array.from(body.children).slice(0, MAX_ROOT_NODES);
+
+  for (const child of children) {
+    const node = extractNodeRecursive(
+      child as Element,
+      orderCounter,
+      0, // depth starts at 0
+      extractedClasses,
+      baseUrl
+    );
+    rootNodes.push(node);
+  }
+
+  return {
+    rootNodes,
+    totalNodes: orderCounter.value,
+  };
+}
+
+/**
+ * Recursively extract a single DOM node and all its children
+ * NO semantic interpretation - just raw data extraction
+ */
+function extractNodeRecursive(
+  element: Element,
+  orderCounter: { value: number },
+  depth: number,
+  extractedClasses: CSSClassInfo[],
+  baseUrl: string
+): RawDOMNode {
+  const currentOrder = orderCounter.value++;
+  const tag = element.tagName.toLowerCase();
+
+  // Extract all attributes
+  const attributes: Record<string, string> = {};
+  for (const attr of Array.from(element.attributes)) {
+    if (attr.name === 'class') continue;
+    attributes[attr.name] = attr.value;
+  }
+
+  // Extract CSS properties (classes + inline merged)
+  const cssProperties = extractAllCSSProperties(element, extractedClasses);
+
+  // Extract images directly in this element (not nested)
+  const images: ImageInfo[] = [];
+  const directImgs = element.querySelectorAll(':scope > img');
+  directImgs.forEach(img => {
+    let src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+    if (src) {
+      try {
+        src = new URL(src, baseUrl).toString();
+      } catch {
+        // Keep as-is
+      }
+      images.push({
+        url: src,
+        alt: (img as HTMLImageElement).alt || undefined,
+      });
+    }
+  });
+
+  // Also check if this element itself is an img
+  if (tag === 'img') {
+    let src = element.getAttribute('src') || element.getAttribute('data-src') || '';
+    if (src) {
+      try {
+        src = new URL(src, baseUrl).toString();
+      } catch {
+        // Keep as-is
+      }
+      images.push({
+        url: src,
+        alt: (element as HTMLImageElement).alt || undefined,
+      });
+    }
+  }
+
+  // Recursively process children (respecting depth limit)
+  const children: RawDOMNode[] = [];
+  const hasChildren = element.children.length > 0;
+
+  if (depth < MAX_DOM_DEPTH) {
+    for (const child of Array.from(element.children)) {
+      children.push(
+        extractNodeRecursive(
+          child as Element,
+          orderCounter,
+          depth + 1,
+          extractedClasses,
+          baseUrl
+        )
+      );
+    }
+  }
+
+  // Get direct text content (not from children)
+  let textContent = '';
+  for (const node of Array.from(element.childNodes)) {
+    if (node.nodeType === 3) { // Text node
+      textContent += node.textContent || '';
+    }
+  }
+  textContent = textContent.trim();
+
+  // If no direct text, get full text content
+  if (!textContent && element.textContent) {
+    textContent = element.textContent.trim();
+  }
+
+  return {
+    tag,
+    order: currentOrder,
+    id: element.id || undefined,
+    attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
+    depth,
+    isContainer: hasChildren,
+    children,
+    textContent,
+    cssProperties,
+    images,
+  };
+}
+
+
+/**
+ * Extract background images from CSS classes
+ * Returns array of ImageInfo for CSS background-image properties
+ */
+function extractBackgroundImages(
+  document: Document,
+  extractedClasses: CSSClassInfo[],
+  baseUrl: string
+): ImageInfo[] {
+  const bgImages: ImageInfo[] = [];
+
+  // Search all CSS classes for background-image
+  for (const cssClass of extractedClasses) {
+    const bgImageProp = cssClass.properties['background-image'] || cssClass.properties['background'];
+
+    if (bgImageProp && bgImageProp.includes('url(')) {
+      // Extract URL from url(...) syntax
+      const urlMatch = bgImageProp.match(/url\(['"]?([^'"()]+)['"]?\)/);
+      if (urlMatch) {
+        let url = urlMatch[1];
+
+        // Resolve relative URLs
+        try {
+          url = new URL(url, baseUrl).toString();
+        } catch {
+          // Keep as-is if URL parsing fails
+        }
+
+        bgImages.push({
+          url,
+          alt: `Background image from .${cssClass.className}`,
+        });
+      }
+    }
+  }
+
+  return bgImages;
+}
+
+function extractNavigation(document: Document): NavItem[] {
+  const navItems: NavItem[] = [];
+  const nav = document.querySelector('nav') || document.querySelector('header nav');
+
+  if (!nav) {
+    // Try to find navigation in header
+    const header = document.querySelector('header');
+    if (header) {
+      const links = header.querySelectorAll('a');
+      links.forEach(link => {
+        const text = link.textContent?.trim() || '';
+        if (text && text.length < 50) {
+          navItems.push({
+            text,
+            href: link.getAttribute('href') || undefined,
+            isButton: link.classList.contains('btn') || link.classList.contains('button'),
+            children: [],
+          });
+        }
+      });
+    }
+    return navItems;
+  }
+
+  // Extract from nav element
+  const topLevelItems = nav.querySelectorAll(':scope > ul > li, :scope > a, :scope > div > a');
+  topLevelItems.forEach(item => {
+    if (item.tagName === 'A') {
+      const link = item as HTMLAnchorElement;
+      navItems.push({
+        text: link.textContent?.trim() || '',
+        href: link.getAttribute('href') || undefined,
+        isButton: link.classList.contains('btn') || link.classList.contains('button'),
+        children: [],
+      });
+    } else if (item.tagName === 'LI') {
+      const link = item.querySelector('a');
+      const subMenu = item.querySelector('ul');
+      const children: NavItem[] = [];
+
+      if (subMenu) {
+        subMenu.querySelectorAll('li > a').forEach(subLink => {
+          children.push({
+            text: subLink.textContent?.trim() || '',
+            href: (subLink as HTMLAnchorElement).getAttribute('href') || undefined,
+            isButton: false,
+            children: [],
+          });
+        });
+      }
+
+      navItems.push({
+        text: link?.textContent?.trim() || item.textContent?.trim().split('\n')[0] || '',
+        href: link?.getAttribute('href') || undefined,
+        isButton: link?.classList.contains('btn') || link?.classList.contains('button') || false,
+        children,
+      });
+    }
+  });
+
+  return navItems;
+}
+
+function extractForms(document: Document): FormInfo[] {
+  const forms: FormInfo[] = [];
+  const formElements = document.querySelectorAll('form');
+
+  formElements.forEach(form => {
+    const fields: FormField[] = [];
+
+    // Extract inputs
+    form.querySelectorAll('input, select, textarea').forEach(input => {
+      const inputEl = input as HTMLInputElement;
+      const type = inputEl.type || inputEl.tagName.toLowerCase();
+
+      // Skip hidden and submit buttons
+      if (type === 'hidden' || type === 'submit') return;
+
+      // Find label
+      let label: string | undefined;
+      const id = inputEl.id;
+      if (id) {
+        const labelEl = document.querySelector(`label[for="${id}"]`);
+        label = labelEl?.textContent?.trim();
+      }
+      if (!label) {
+        // Check for wrapping label
+        const parentLabel = inputEl.closest('label');
+        if (parentLabel) {
+          label = parentLabel.textContent?.replace(inputEl.value || '', '').trim();
+        }
+      }
+
+      // Extract options for select
+      let options: string[] | undefined;
+      if (inputEl.tagName === 'SELECT') {
+        options = Array.from((input as HTMLSelectElement).options).map(opt => opt.text);
+      }
+
+      fields.push({
+        name: inputEl.name || inputEl.id || '',
+        type: type === 'textarea' ? 'textarea' : type,
+        label,
+        placeholder: inputEl.placeholder || undefined,
+        required: inputEl.required || inputEl.hasAttribute('required'),
+        options,
+      });
+    });
+
+    // Find submit button
+    const submitBtn = form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+    const submitButtonText = submitBtn?.textContent?.trim() || (submitBtn as HTMLInputElement)?.value;
+
+    forms.push({
+      id: form.id || undefined,
+      action: form.action || undefined,
+      method: form.method || 'GET',
+      fields,
+      submitButtonText,
+    });
+  });
+
+  return forms;
+}
+
+function extractImages(document: Document, baseUrl: string): ImageInfo[] {
+  const images: ImageInfo[] = [];
+  const imgElements = document.querySelectorAll('img');
+
+  imgElements.forEach(img => {
+    let src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+    if (!src) return;
+
+    // Resolve relative URLs
+    try {
+      src = new URL(src, baseUrl).toString();
+    } catch {
+      // Keep as-is if URL parsing fails
+    }
+
+    images.push({
+      url: src,
+      alt: img.alt || undefined,
+    });
+  });
+
+  return images;
+}
+
+function extractColors(document: Document): ColorInfo[] {
+  const colorMap = new Map<string, { property: string; count: number }>();
+
+  const allElements = document.querySelectorAll('*');
+  allElements.forEach(el => {
+    const style = el.getAttribute('style');
+    if (!style) return;
+
+    // Extract color properties
+    const colorProps = ['background-color', 'background', 'color', 'border-color'];
+    colorProps.forEach(prop => {
+      const regex = new RegExp(`${prop}\\s*:\\s*([^;]+)`, 'i');
+      const match = style.match(regex);
+      if (match) {
+        const value = match[1].trim();
+        // Only keep hex colors or rgb/rgba
+        if (value.match(/^#|^rgb/i)) {
+          const key = `${value}|${prop}`;
+          const existing = colorMap.get(key);
+          if (existing) {
+            existing.count++;
+          } else {
+            colorMap.set(key, { property: prop, count: 1 });
+          }
+        }
+      }
+    });
+  });
+
+  const colors: ColorInfo[] = [];
+  colorMap.forEach((data, key) => {
+    const [value] = key.split('|');
+    colors.push({
+      value,
+      property: data.property,
+      frequency: data.count,
+    });
+  });
+
+  // Sort by frequency
+  return colors.sort((a, b) => b.frequency - a.frequency);
+}
+
+function extractCTAs(document: Document): CTAInfo[] {
+  const ctas: CTAInfo[] = [];
+
+  // Find buttons and button-like links
+  const buttonLike = document.querySelectorAll('button, a.btn, a.button, a[class*="btn"], a[class*="button"], input[type="submit"]');
+
+  buttonLike.forEach(el => {
+    const text = el.textContent?.trim().toLowerCase() || (el as HTMLInputElement).value?.toLowerCase() || '';
+    if (!text) return;
+
+    // Determine if it's a primary CTA
+    const isPrimary = CTA_KEYWORDS.some(kw => text.includes(kw)) ||
+      el.classList.contains('primary') ||
+      el.classList.contains('btn-primary') ||
+      el.classList.contains('cta');
+
+    // Determine location
+    let location = 'section';
+    if (el.closest('header') || el.closest('nav')) location = 'header';
+    else if (el.closest('footer')) location = 'footer';
+    else if (el.closest('.hero') || el.closest('[class*="hero"]') || el.closest('#hero')) location = 'hero';
+
+    ctas.push({
+      text: el.textContent?.trim() || (el as HTMLInputElement).value || '',
+      href: (el as HTMLAnchorElement).href || undefined,
+      type: isPrimary ? 'primary' : el.tagName === 'A' ? 'link' : 'secondary',
+      location,
+    });
+  });
+
+  return ctas;
+}
+
+function extractFooter(document: Document): FooterInfo | null {
+  const footer = document.querySelector('footer');
+  if (!footer) return null;
+
+  const columns: FooterColumn[] = [];
+
+  // Try to find footer columns
+  const possibleColumns = footer.querySelectorAll('div > div, section, ul');
+  possibleColumns.forEach(col => {
+    const heading = col.querySelector('h3, h4, h5, h6, strong');
+    const links = col.querySelectorAll('a');
+
+    if (links.length > 0) {
+      columns.push({
+        heading: heading?.textContent?.trim(),
+        links: Array.from(links).map(link => ({
+          text: link.textContent?.trim() || '',
+          href: (link as HTMLAnchorElement).href || undefined,
+        })),
+      });
+    }
+  });
+
+  // Extract copyright
+  const copyrightMatch = footer.textContent?.match(/©\s*\d{4}[^.]*|copyright[^.]+/i);
+  const copyright = copyrightMatch?.[0]?.trim();
+
+  // Extract social links from footer
+  const socialLinks = extractSocialLinks(footer as unknown as Document);
+
+  return {
+    columns,
+    copyright,
+    socialLinks,
+  };
+}
+
+function extractSocialLinks(container: Document | Element): SocialLink[] {
+  const socialLinks: SocialLink[] = [];
+  const links = container.querySelectorAll('a[href]');
+
+  links.forEach(link => {
+    const href = (link as HTMLAnchorElement).href;
+    if (!href) return;
+
+    for (const { pattern, platform } of SOCIAL_PATTERNS) {
+      if (pattern.test(href)) {
+        // Avoid duplicates
+        if (!socialLinks.find(sl => sl.url === href)) {
+          socialLinks.push({ platform, url: href });
+        }
+        break;
+      }
+    }
+  });
+
+  return socialLinks;
+}
+
+function extractMetadata(document: Document): PageMetadata {
+  const title = document.querySelector('title')?.textContent?.trim();
+  const description = document.querySelector('meta[name="description"]')?.getAttribute('content') || undefined;
+
+  const ogTags: Record<string, string> = {};
+  document.querySelectorAll('meta[property^="og:"]').forEach(meta => {
+    const property = meta.getAttribute('property')?.replace('og:', '');
+    const content = meta.getAttribute('content');
+    if (property && content) {
+      ogTags[property] = content;
+    }
+  });
+
+  const favicon = document.querySelector('link[rel="icon"], link[rel="shortcut icon"]')?.getAttribute('href') || undefined;
+
+  return {
+    title,
+    description,
+    ogTags,
+    favicon,
+  };
+}
+
+function detectLanguage(document: Document): string {
+  // Try html lang attribute
+  const htmlLang = document.documentElement.getAttribute('lang');
+  if (htmlLang) return htmlLang.split('-')[0];
+
+  // Try meta tag
+  const metaLang = document.querySelector('meta[http-equiv="content-language"]')?.getAttribute('content');
+  if (metaLang) return metaLang.split('-')[0];
+
+  // Default to English
+  return 'en';
+}
+
+function getRawTextContent(document: Document): string {
+  // Get text from body, removing excessive whitespace
+  const body = document.body;
+  if (!body) return '';
+
+  return body.textContent?.replace(/\s+/g, ' ').trim().slice(0, 5000) || '';
+}
+
+export const parser = {
+  parse: parseHtml,
+};
+</file>
+
+<file path="pipeline/synthesizer.ts">
+import {
+  IntermediateRepresentation,
+  RawParsedDOM,
+  RawDOMNode,
+  StructuralAnalysis,
+  DesignInterpretation,
+  IRNode,
+  LayoutInfo,
+  ComponentInfo,
+  NavigationInfo,
+  MotionIntent,
+  ImageInfo,
+} from './ir.types';
+
+/**
+ * Synthesizer - Converts IR to final professional prompt
+ * Output: Markdown + JSON Schema format
+ * Tone: Confident, Directive, Instructional
+ * Audience: AI Code Generators only
+ */
+
+/**
+ * Build Intermediate Representation from parsed DOM and LLM interpretation
+ */
+export function buildIntermediateRepresentation(
+  sourceUrl: string,
+  parsed: RawParsedDOM,
+  structural: StructuralAnalysis,
+  interpretation: DesignInterpretation
+): IntermediateRepresentation {
+  // Build a map from node order to node for quick lookup
+  const nodeMap = new Map<number, RawDOMNode>();
+  traverseTree(parsed.rootNodes, (node) => {
+    nodeMap.set(node.order, node);
+  });
+
+  // Build IR nodes from LLM interpretation + parsed data
+  const nodes: IRNode[] = interpretation.nodes.map((llmNode) => {
+    const rawNode = nodeMap.get(llmNode.nodeOrder);
+
+    // Collect images from node and its children
+    const nodeImages: ImageInfo[] = [];
+    if (rawNode) {
+      collectImages(rawNode, nodeImages);
+    }
+
+    return {
+      order: llmNode.nodeOrder,
+      tag: rawNode?.tag || 'unknown',
+      type: llmNode.inferredRole,
+      description: llmNode.visualDescription,
+      cssProperties: rawNode?.cssProperties || {},
+      depth: rawNode?.depth || 0,
+      isContainer: rawNode?.isContainer || false,
+      childCount: rawNode?.children.length || 0,
+      roleConfidence: llmNode.confidence,
+      images: nodeImages,
+    };
+  });
+
+  // Build layout info
+  const layout: LayoutInfo = {
+    type: structural.layoutType,
+    hasGrid: structural.layoutType === 'grid',
+    columnCount: parsed.cssInfo.gridColumns || parsed.cssInfo.flexColumns ||
+                 (structural.layoutType === 'two-column' ? 2 :
+                  structural.layoutType === 'single-column' ? 1 : undefined),
+  };
+
+  // Build components based on LLM interpretation
+  const components: ComponentInfo[] = [];
+
+  // Check if LLM identified a hero
+  const hasHero = interpretation.nodes.some(n =>
+    n.inferredRole.toLowerCase().includes('hero')
+  );
+  if (hasHero) {
+    components.push({ type: 'hero', description: 'Hero section with headline and CTA', location: 'top' });
+  }
+
+  if (parsed.allForms.length > 0) {
+    components.push({
+      type: 'form',
+      description: `${parsed.allForms.length} form(s) with ${parsed.allForms.reduce((a, f) => a + f.fields.length, 0)} total fields`,
+      location: 'various'
+    });
+  }
+
+  // Check for grid/card sections from LLM interpretation
+  const cardSections = interpretation.nodes.filter(n =>
+    n.inferredRole.toLowerCase().includes('feature') ||
+    n.inferredRole.toLowerCase().includes('card') ||
+    n.inferredRole.toLowerCase().includes('grid') ||
+    n.inferredRole.toLowerCase().includes('testimonial')
+  );
+  if (cardSections.length > 0) {
+    components.push({
+      type: 'card-grid',
+      description: `${cardSections.length} card-based section(s)`,
+      location: 'various'
+    });
+  }
+
+  // Build navigation info
+  const navigation: NavigationInfo | null = parsed.navigation.length > 0 ? {
+    position: null,  // Cannot determine from HTML alone
+    style: null,     // Cannot determine from HTML alone
+    items: parsed.navigation,
+  } : null;
+
+  // Build motion intents
+  const motionIntent: MotionIntent[] = interpretation.suggestedAnimations.map(anim => ({
+    element: 'nodes',
+    animation: anim,
+    trigger: null,  // Don't guess load vs scroll
+  }));
+
+  return {
+    sourceUrl,
+    nodes,
+    layout,
+    components,
+    navigation,
+    forms: parsed.allForms,
+    ctas: parsed.ctas,
+    footer: parsed.footer,
+    embeds: parsed.embeds,
+    colors: parsed.colors,
+    fonts: parsed.fonts,
+    motionIntent,
+    metadata: {
+      title: parsed.metadata.title || '',
+      description: parsed.metadata.description || '',
+      ogTags: parsed.metadata.ogTags,
+      language: parsed.language,
+      difficulty: structural.difficulty,
+      difficultyReason: structural.difficultyReason,
+    },
+  };
+}
+
+/**
+ * Traverse all nodes in the tree and apply a callback
+ */
+function traverseTree(nodes: RawDOMNode[], callback: (node: RawDOMNode) => void): void {
+  function traverse(node: RawDOMNode): void {
+    callback(node);
+    for (const child of node.children) {
+      traverse(child);
+    }
+  }
+
+  for (const node of nodes) {
+    traverse(node);
+  }
+}
+
+/**
+ * Collect all images from a node and its children
+ */
+function collectImages(node: RawDOMNode, images: ImageInfo[]): void {
+  images.push(...node.images);
+  for (const child of node.children) {
+    collectImages(child, images);
+  }
+}
+
+/**
+ * Synthesize final prompt from Intermediate Representation
+ */
+export function synthesizePrompt(ir: IntermediateRepresentation): string {
+  const lines: string[] = [];
+
+  // Title
+  lines.push('# Landing Page Recreation Prompt');
+  lines.push('');
+
+  // Metadata section
+  lines.push('## Metadata');
+  lines.push(`- **Source URL**: ${ir.sourceUrl}`);
+  lines.push(`- **Page Title**: ${ir.metadata.title || 'Untitled'}`);
+  lines.push(`- **Language**: ${ir.metadata.language.toUpperCase()}`);
+  lines.push(`- **Difficulty**: ${ir.metadata.difficulty.toUpperCase()} - ${ir.metadata.difficultyReason}`);
+  lines.push('');
+
+  // Page description
+  if (ir.metadata.description) {
+    lines.push('## Page Description');
+    lines.push(ir.metadata.description);
+    lines.push('');
+  }
+
+  // Page structure overview
+  lines.push('## Page Structure Overview');
+  lines.push(`This landing page uses a **${ir.layout.type}** layout with **${ir.nodes.length}** significant sections.`);
+  lines.push('');
+
+  // Nodes detail (semantic sections)
+  lines.push('## Sections');
+  lines.push('Build the following sections in order:');
+  lines.push('');
+
+  ir.nodes.forEach((node, index) => {
+    const confidenceMark = node.roleConfidence === 'low' ? ' (low confidence)' :
+                           node.roleConfidence === 'medium' ? ' (medium confidence)' : '';
+    lines.push(`### ${index + 1}. ${capitalizeFirst(node.type)} Section${confidenceMark}`);
+
+    // Description (from LLM)
+    if (node.description) {
+      lines.push(`**Purpose:** ${node.description}`);
+      lines.push('');
+    }
+
+    // Node info
+    lines.push(`**Element:** \`<${node.tag}>\` (order: ${node.order}, depth: ${node.depth})`);
+    lines.push('');
+
+    // Visual Implementation Details (from CSS)
+    if (node.cssProperties && Object.keys(node.cssProperties).length > 0) {
+      lines.push('**Visual Implementation:**');
+
+      // Position & Layout
+      if (node.cssProperties['position'] && node.cssProperties['position'] !== 'static') {
+        lines.push(`- Position: \`${node.cssProperties['position']}\``);
+        if (node.cssProperties['top']) lines.push(`  - Top: \`${node.cssProperties['top']}\``);
+        if (node.cssProperties['z-index']) lines.push(`  - Z-index: \`${node.cssProperties['z-index']}\``);
+      }
+
+      // Background
+      const bg = node.cssProperties['background-color'] || node.cssProperties['background'];
+      if (bg) {
+        lines.push(`- Background: \`${bg}\``);
+      }
+
+      // Color
+      if (node.cssProperties['color']) {
+        lines.push(`- Text Color: \`${node.cssProperties['color']}\``);
+      }
+
+      // Layout System
+      if (node.cssProperties['display']) {
+        const display = node.cssProperties['display'];
+        lines.push(`- Layout: \`${display}\``);
+
+        if (display === 'grid' && node.cssProperties['grid-template-columns']) {
+          lines.push(`  - Columns: \`${node.cssProperties['grid-template-columns']}\``);
+        }
+
+        if (display === 'flex') {
+          if (node.cssProperties['flex-direction']) {
+            lines.push(`  - Direction: \`${node.cssProperties['flex-direction']}\``);
+          }
+          if (node.cssProperties['justify-content']) {
+            lines.push(`  - Justify: \`${node.cssProperties['justify-content']}\``);
+          }
+        }
+      }
+
+      // Spacing
+      if (node.cssProperties['padding']) {
+        lines.push(`- Padding: \`${node.cssProperties['padding']}\``);
+      }
+
+      // Visual Effects
+      if (node.cssProperties['box-shadow']) {
+        lines.push(`- Elevation: \`${node.cssProperties['box-shadow']}\``);
+      }
+      if (node.cssProperties['backdrop-filter']) {
+        lines.push(`- Backdrop: \`${node.cssProperties['backdrop-filter']}\``);
+      }
+      if (node.cssProperties['border-radius']) {
+        lines.push(`- Border Radius: \`${node.cssProperties['border-radius']}\``);
+      }
+
+      lines.push('');
+    }
+
+    // Include images
+    if (node.images.length > 0) {
+      lines.push(`**Images (${node.images.length}):**`);
+      node.images.slice(0, 3).forEach(img => {
+        lines.push(`- ${img.alt || 'Decorative image'}`);
+      });
+      if (node.images.length > 3) {
+        lines.push(`- ... and ${node.images.length - 3} more images`);
+      }
+      lines.push('');
+    }
+
+    // Container info
+    if (node.isContainer && node.childCount > 0) {
+      lines.push(`- Contains **${node.childCount}** child elements`);
+    }
+    lines.push('');
+  });
+
+  // Navigation
+  if (ir.navigation) {
+    lines.push('## Navigation');
+
+    // Only include position/style if known
+    if (ir.navigation.position || ir.navigation.style) {
+      const parts = [];
+      if (ir.navigation.position) parts.push(`Position: **${ir.navigation.position}**`);
+      if (ir.navigation.style) parts.push(`Style: **${ir.navigation.style}**`);
+      lines.push(parts.join(', '));
+      lines.push('');
+    }
+
+    lines.push('Menu items:');
+    ir.navigation.items.forEach(item => {
+      const buttonMark = item.isButton ? ' `[BUTTON]`' : '';
+      lines.push(`- ${item.text}${buttonMark}`);
+      if (item.children.length > 0) {
+        item.children.forEach(child => lines.push(`  - ${child.text}`));
+      }
+    });
+    lines.push('');
+  }
+
+  // CTAs
+  if (ir.ctas.length > 0) {
+    lines.push('## Call-to-Action Buttons');
+    ir.ctas.forEach(cta => {
+      lines.push(`- **"${cta.text}"** - ${cta.type} button in ${cta.location}`);
+    });
+    lines.push('');
+  }
+
+  // Forms
+  if (ir.forms.length > 0) {
+    lines.push('## Forms');
+    ir.forms.forEach((form, i) => {
+      lines.push(`### Form ${i + 1}`);
+      lines.push(`Method: ${form.method.toUpperCase()}`);
+      lines.push('');
+      lines.push('Fields:');
+      form.fields.forEach(field => {
+        const required = field.required ? ' *(required)*' : '';
+        lines.push(`- **${field.label || field.name}**: \`${field.type}\`${required}`);
+        if (field.placeholder) {
+          lines.push(`  - Placeholder: "${field.placeholder}"`);
+        }
+        if (field.options && field.options.length > 0) {
+          lines.push(`  - Options: ${field.options.join(', ')}`);
+        }
+      });
+      if (form.submitButtonText) {
+        lines.push(`- Submit button text: **"${form.submitButtonText}"**`);
+      }
+      lines.push('');
+    });
+  }
+
+  // Footer
+  if (ir.footer) {
+    lines.push('## Footer');
+    if (ir.footer.columns.length > 0) {
+      lines.push(`Structure: **${ir.footer.columns.length} columns**`);
+      lines.push('');
+      ir.footer.columns.forEach((col, i) => {
+        lines.push(`Column ${i + 1}${col.heading ? ` - "${col.heading}"` : ''}:`);
+        col.links.forEach(link => lines.push(`  - ${link.text}`));
+      });
+      lines.push('');
+    }
+    if (ir.footer.socialLinks.length > 0) {
+      lines.push('Social links: ' + ir.footer.socialLinks.map(s => capitalizeFirst(s.platform)).join(', '));
+      lines.push('');
+    }
+    if (ir.footer.copyright) {
+      lines.push(`Copyright: ${ir.footer.copyright}`);
+      lines.push('');
+    }
+  }
+
+  // Design Details
+  lines.push('## Design Details');
+  lines.push('');
+
+  // Colors
+  if (ir.colors.length > 0) {
+    lines.push('### Color Palette');
+    const topColors = ir.colors.slice(0, 6);
+    topColors.forEach(color => {
+      lines.push(`- \`${color.value}\` - ${color.property}`);
+    });
+    lines.push('');
+  }
+
+  // Typography
+  if (ir.fonts.length > 0) {
+    lines.push('### Typography');
+    ir.fonts.forEach(font => {
+      lines.push(`- **${font.family}** (${font.source})`);
+    });
+    lines.push('');
+  }
+
+  // Animations
+  if (ir.motionIntent.length > 0) {
+    lines.push('### Animations');
+    lines.push('Apply conservative animations:');
+    ir.motionIntent.forEach(motion => {
+      const triggerText = motion.trigger ? ` (trigger: ${motion.trigger})` : ' (trigger: TBD)';
+      lines.push(`- **${motion.animation}** on ${motion.element}${triggerText}`);
+    });
+    lines.push('');
+  }
+
+  // Embedded Content
+  if (ir.embeds.length > 0) {
+    lines.push('### Embedded Content');
+    ir.embeds.forEach(embed => {
+      lines.push(`- ${capitalizeFirst(embed.type)}${embed.platform ? ` (${embed.platform})` : ''}`);
+    });
+    lines.push('');
+  }
+
+  // JSON Schema
+  lines.push('---');
+  lines.push('');
+  lines.push('## JSON Schema');
+  lines.push('```json');
+  lines.push(JSON.stringify(ir, null, 2));
+  lines.push('```');
+
+  return lines.join('\n');
+}
+
+function capitalizeFirst(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+export const synthesizer = {
+  buildIR: buildIntermediateRepresentation,
+  synthesize: synthesizePrompt,
+};
+</file>
+
+<file path="pipeline/token-budget.ts">
+/**
+ * Token Budget Manager
+ * Handles data reduction based on user tier and token limits
+ */
+
+import { RawParsedDOM, RawDOMNode, CSSClassInfo, ColorInfo, ImageInfo } from './ir.types';
+
+// ============ User Tiers ============
+export type UserTier = 'free' | 'basic' | 'pro' | 'enterprise';
+
+export interface TokenBudgetConfig {
+  maxTokens: number;
+  maxCSSClasses: number;
+  maxCSSPropertiesPerNode: number;  // Limit CSS properties per node
+  maxColors: number;
+  maxImages: number;
+  maxRootNodes: number;  // Changed from maxSections
+  maxNavItems: number;
+  maxTextCharsPerNode: number;  // Configurable text limit per node
+  includeCSSDetails: boolean;
+  includeAllMetadata: boolean;
+}
+
+// ============ Tier Configurations ============
+export const TIER_CONFIGS: Record<UserTier, TokenBudgetConfig> = {
+  free: {
+    maxTokens: 2000,
+    maxCSSClasses: 10,
+    maxCSSPropertiesPerNode: 10,
+    maxColors: 5,
+    maxImages: 5,
+    maxRootNodes: 5,
+    maxNavItems: 5,
+    maxTextCharsPerNode: 100,
+    includeCSSDetails: true,
+    includeAllMetadata: false,
+  },
+  basic: {
+    maxTokens: 5000,
+    maxCSSClasses: 30,
+    maxCSSPropertiesPerNode: 20,
+    maxColors: 15,
+    maxImages: 15,
+    maxRootNodes: 15,
+    maxNavItems: 10,
+    maxTextCharsPerNode: 150,
+    includeCSSDetails: true,
+    includeAllMetadata: false,
+  },
+  pro: {
+    maxTokens: 15000,
+    maxCSSClasses: 100,
+    maxCSSPropertiesPerNode: -1,  // Unlimited
+    maxColors: 30,
+    maxImages: 30,
+    maxRootNodes: 30,
+    maxNavItems: 20,
+    maxTextCharsPerNode: 200,
+    includeCSSDetails: true,
+    includeAllMetadata: true,
+  },
+  enterprise: {
+    maxTokens: 50000,
+    maxCSSClasses: -1, // unlimited
+    maxCSSPropertiesPerNode: -1,  // Unlimited
+    maxColors: -1,
+    maxImages: -1,
+    maxRootNodes: -1,
+    maxNavItems: -1,
+    maxTextCharsPerNode: -1,  // Unlimited
+    includeCSSDetails: true,
+    includeAllMetadata: true,
+  },
+};
+
+// ============ Data Priority Levels ============
+// Higher priority = more important to keep
+interface DataPriority {
+  rootNodes: number;
+  navigation: number;
+  forms: number;
+  ctas: number;
+  colors: number;
+  fonts: number;
+  cssClasses: number;
+  images: number;
+  footer: number;
+  socialLinks: number;
+  embeds: number;
+}
+
+const DATA_PRIORITIES: DataPriority = {
+  rootNodes: 10,      // Critical
+  navigation: 9,
+  forms: 8,
+  ctas: 8,
+  colors: 6,
+  fonts: 7,
+  cssClasses: 5,
+  images: 4,
+  footer: 3,
+  socialLinks: 2,
+  embeds: 2,
+};
+
+// ============ Truncation Utilities ============
+
+/**
+ * Truncate CSS classes based on priority
+ */
+export function truncateCSSClasses(
+  classes: CSSClassInfo[],
+  maxClasses: number
+): CSSClassInfo[] {
+  if (maxClasses === -1) return classes;
+
+  // Prioritize classes by number of properties (more properties = more important)
+  const sorted = [...classes].sort((a, b) => {
+    const aProps = Object.keys(a.properties).length;
+    const bProps = Object.keys(b.properties).length;
+    return bProps - aProps;
+  });
+
+  return sorted.slice(0, maxClasses);
+}
+
+/**
+ * Truncate colors by frequency
+ */
+export function truncateColors(
+  colors: ColorInfo[],
+  maxColors: number
+): ColorInfo[] {
+  if (maxColors === -1) return colors;
+
+  // Already sorted by frequency in parser
+  return colors.slice(0, maxColors);
+}
+
+/**
+ * Truncate images
+ */
+export function truncateImages(
+  images: ImageInfo[],
+  maxImages: number
+): ImageInfo[] {
+  if (maxImages === -1) return images;
+
+  // Prioritize images with alt text (more semantic)
+  const sorted = [...images].sort((a, b) => {
+    if (a.alt && !b.alt) return -1;
+    if (!a.alt && b.alt) return 1;
+    return 0;
+  });
+
+  return sorted.slice(0, maxImages);
+}
+
+/**
+ * Simplify CSS class properties for token reduction
+ */
+export function simplifyCSSClass(
+  cssClass: CSSClassInfo,
+  includeFull: boolean
+): CSSClassInfo {
+  if (includeFull) return cssClass;
+
+  // Keep only essential properties
+  const essentialProps = [
+    'display', 'position', 'width', 'height', 'max-width', 'max-height',
+    'padding', 'margin', 'background', 'background-color', 'color',
+    'font-size', 'font-family', 'font-weight',
+    'flex', 'grid', 'grid-template-columns',
+    'border', 'border-radius',
+  ];
+
+  const simplified: Record<string, string> = {};
+  for (const prop of essentialProps) {
+    if (cssClass.properties[prop]) {
+      simplified[prop] = cssClass.properties[prop];
+    }
+  }
+
+  return {
+    ...cssClass,
+    properties: simplified,
+  };
+}
+
+/**
+ * Estimate token count (rough approximation)
+ * 1 token ≈ 4 characters for English text
+ */
+export function estimateTokens(data: any): number {
+  const jsonString = JSON.stringify(data);
+  return Math.ceil(jsonString.length / 4);
+}
+
+/**
+ * Truncate root nodes (limit tree depth and breadth)
+ */
+function truncateRootNodes(
+  rootNodes: RawDOMNode[],
+  maxRootNodes: number,
+  maxTextChars: number
+): RawDOMNode[] {
+  if (maxRootNodes === -1) return rootNodes;
+
+  const truncatedNodes = rootNodes.slice(0, maxRootNodes);
+
+  // Also truncate text content in each node
+  return truncatedNodes.map(node => truncateNode(node, maxTextChars));
+}
+
+/**
+ * Truncate a single node's content recursively
+ */
+function truncateNode(node: RawDOMNode, maxTextChars: number): RawDOMNode {
+  return {
+    ...node,
+    textContent: maxTextChars === -1
+      ? node.textContent
+      : node.textContent.slice(0, maxTextChars),
+    children: node.children.map(child => truncateNode(child, maxTextChars)),
+  };
+}
+
+// ============ Main Budget Reducer ============
+
+export interface ReducedParsedDOM extends Omit<RawParsedDOM, 'rawTextContent'> {
+  rawTextContent?: string; // Optional now
+  _metadata?: {
+    tier: UserTier;
+    estimatedTokens: number;
+    wasReduced: boolean;
+  };
+}
+
+/**
+ * Reduce RawParsedDOM data based on user tier
+ */
+export function applyTokenBudget(
+  parsedDOM: RawParsedDOM,
+  tier: UserTier = 'free'
+): ReducedParsedDOM {
+  const config = TIER_CONFIGS[tier];
+
+  // Apply truncations
+  const reducedData: ReducedParsedDOM = {
+    rootNodes: truncateRootNodes(
+      parsedDOM.rootNodes,
+      config.maxRootNodes,
+      config.maxTextCharsPerNode
+    ),
+    totalNodes: parsedDOM.totalNodes,
+    navigation: parsedDOM.navigation.slice(0, config.maxNavItems === -1 ? undefined : config.maxNavItems),
+    allForms: parsedDOM.allForms,
+    allImages: truncateImages(parsedDOM.allImages, config.maxImages),
+    colors: truncateColors(parsedDOM.colors, config.maxColors),
+    fonts: parsedDOM.fonts,
+    ctas: parsedDOM.ctas,
+    footer: parsedDOM.footer,
+    socialLinks: parsedDOM.socialLinks,
+    embeds: parsedDOM.embeds,
+    metadata: config.includeAllMetadata ? parsedDOM.metadata : {
+      title: parsedDOM.metadata.title,
+      description: parsedDOM.metadata.description,
+      ogTags: {},
+    },
+    language: parsedDOM.language,
+    cssInfo: {
+      gridColumns: parsedDOM.cssInfo.gridColumns,
+      flexColumns: parsedDOM.cssInfo.flexColumns,
+      breakpoints: parsedDOM.cssInfo.breakpoints,
+      hasResponsiveGrid: parsedDOM.cssInfo.hasResponsiveGrid,
+      classes: config.includeCSSDetails
+        ? truncateCSSClasses(parsedDOM.cssInfo.classes, config.maxCSSClasses)
+        : truncateCSSClasses(parsedDOM.cssInfo.classes, config.maxCSSClasses).map(
+            cls => simplifyCSSClass(cls, false)
+          ),
+    },
+  };
+
+  // Optionally include raw text (truncated)
+  if (config.includeAllMetadata && parsedDOM.rawTextContent) {
+    reducedData.rawTextContent = parsedDOM.rawTextContent.slice(0, 1000);
+  }
+
+  // Add metadata
+  const estimatedTokens = estimateTokens(reducedData);
+  reducedData._metadata = {
+    tier,
+    estimatedTokens,
+    wasReduced: estimatedTokens < estimateTokens(parsedDOM),
+  };
+
+  return reducedData;
+}
+
+// ============ Custom Budget ============
+
+/**
+ * Apply custom token budget configuration
+ */
+export function applyCustomBudget(
+  parsedDOM: RawParsedDOM,
+  customConfig: Partial<TokenBudgetConfig>
+): ReducedParsedDOM {
+  const config: TokenBudgetConfig = {
+    ...TIER_CONFIGS.free,
+    ...customConfig,
+  };
+
+  // Same logic as applyTokenBudget but with custom config
+  const reducedData: ReducedParsedDOM = {
+    rootNodes: truncateRootNodes(
+      parsedDOM.rootNodes,
+      config.maxRootNodes,
+      config.maxTextCharsPerNode
+    ),
+    totalNodes: parsedDOM.totalNodes,
+    navigation: parsedDOM.navigation.slice(0, config.maxNavItems === -1 ? undefined : config.maxNavItems),
+    allForms: parsedDOM.allForms,
+    allImages: truncateImages(parsedDOM.allImages, config.maxImages),
+    colors: truncateColors(parsedDOM.colors, config.maxColors),
+    fonts: parsedDOM.fonts,
+    ctas: parsedDOM.ctas,
+    footer: parsedDOM.footer,
+    socialLinks: parsedDOM.socialLinks,
+    embeds: parsedDOM.embeds,
+    metadata: config.includeAllMetadata ? parsedDOM.metadata : {
+      title: parsedDOM.metadata.title,
+      description: parsedDOM.metadata.description,
+      ogTags: {},
+    },
+    language: parsedDOM.language,
+    cssInfo: {
+      gridColumns: parsedDOM.cssInfo.gridColumns,
+      flexColumns: parsedDOM.cssInfo.flexColumns,
+      breakpoints: parsedDOM.cssInfo.breakpoints,
+      hasResponsiveGrid: parsedDOM.cssInfo.hasResponsiveGrid,
+      classes: config.includeCSSDetails
+        ? truncateCSSClasses(parsedDOM.cssInfo.classes, config.maxCSSClasses)
+        : truncateCSSClasses(parsedDOM.cssInfo.classes, config.maxCSSClasses).map(
+            cls => simplifyCSSClass(cls, false)
+          ),
+    },
+  };
+
+  if (config.includeAllMetadata && parsedDOM.rawTextContent) {
+    reducedData.rawTextContent = parsedDOM.rawTextContent.slice(0, 1000);
+  }
+
+  const estimatedTokens = estimateTokens(reducedData);
+  reducedData._metadata = {
+    tier: 'basic', // custom tier
+    estimatedTokens,
+    wasReduced: estimatedTokens < estimateTokens(parsedDOM),
+  };
+
+  return reducedData;
+}
+
+/**
+ * Prioritize CSS properties based on importance
+ * Returns top N properties based on tier-based priority
+ */
+export function prioritizeCSSProperties(
+  cssProperties: Record<string, string>,
+  maxProperties: number
+): Record<string, string> {
+  if (maxProperties === -1) return cssProperties;
+
+  // Tier 1: Layout positioning (critical for visual hierarchy)
+  const tier1 = ['position', 'top', 'left', 'right', 'bottom', 'z-index'];
+
+  // Tier 2: Colors (critical for brand/theme)
+  const tier2 = ['background-color', 'background', 'color', 'border-color'];
+
+  // Tier 3: Layout system (grid/flex)
+  const tier3 = ['display', 'flex-direction', 'grid-template-columns', 'align-items', 'justify-content'];
+
+  // Tier 4: Spacing
+  const tier4 = ['padding', 'margin', 'gap', 'width', 'height', 'max-width'];
+
+  // Tier 5: Decorative
+  const tier5 = ['border', 'border-radius', 'box-shadow', 'opacity', 'transform', 'backdrop-filter'];
+
+  const result: Record<string, string> = {};
+  let count = 0;
+
+  for (const tier of [tier1, tier2, tier3, tier4, tier5]) {
+    for (const prop of tier) {
+      if (count >= maxProperties) return result;
+      if (cssProperties[prop]) {
+        result[prop] = cssProperties[prop];
+        count++;
+      }
+    }
+  }
+
+  return result;
+}
+</file>
+
+</files>

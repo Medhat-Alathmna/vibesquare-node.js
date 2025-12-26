@@ -16,6 +16,7 @@
   "description": "Backend API for VibeSquare Gallery",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@toon-format/toon": "^2.1.0",
     "@types/jsdom": "^27.0.0",
     "bcrypt": "^5.1.1",
     "compression": "^1.8.1",
