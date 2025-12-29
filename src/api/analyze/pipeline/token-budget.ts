@@ -3,7 +3,9 @@
  * Handles data reduction based on user tier and token limits
  */
 
-import { RawParsedDOM, RawDOMNode, CSSClassInfo, ColorInfo, ImageInfo } from './ir.types';
+import { RawParsedDOM, RawDOMNode, CSSClassInfo, ColorInfo, ImageInfo, CSSValueDictionary } from './ir.types';
+import { ApiError } from '../../../shared/utils/ApiError';
+import httpStatus from 'http-status';
 
 // ============ User Tiers ============
 export type UserTier = 'free' | 'basic' | 'pro' | 'enterprise';
@@ -19,57 +21,68 @@ export interface TokenBudgetConfig {
   maxTextCharsPerNode: number;  // Configurable text limit per node
   includeCSSDetails: boolean;
   includeAllMetadata: boolean;
+  // CSS Value Compression
+  enableCSSCompression: boolean;      // Enable dictionary encoding for CSS values
+  compressionMinOccurrences: number;  // Min occurrences to add value to dictionary
 }
 
 // ============ Tier Configurations ============
 export const TIER_CONFIGS: Record<UserTier, TokenBudgetConfig> = {
   free: {
-    maxTokens: 2000,
-    maxCSSClasses: 10,
-    maxCSSPropertiesPerNode: 10,
-    maxColors: 5,
-    maxImages: 5,
-    maxRootNodes: 5,
-    maxNavItems: 5,
-    maxTextCharsPerNode: 100,
+    maxTokens: 20000,
+    maxCSSClasses: 50,
+    maxCSSPropertiesPerNode: 20,
+    maxColors: 20,
+    maxImages: 20,
+    maxRootNodes: 50,
+    maxNavItems: 20,
+    maxTextCharsPerNode: 500,
     includeCSSDetails: true,
     includeAllMetadata: false,
+    enableCSSCompression: true,
+    compressionMinOccurrences: 2,
   },
   basic: {
-    maxTokens: 5000,
-    maxCSSClasses: 30,
-    maxCSSPropertiesPerNode: 20,
-    maxColors: 15,
-    maxImages: 15,
-    maxRootNodes: 15,
-    maxNavItems: 10,
-    maxTextCharsPerNode: 150,
-    includeCSSDetails: true,
-    includeAllMetadata: false,
-  },
-  pro: {
-    maxTokens: 15000,
+    maxTokens: 50000,
     maxCSSClasses: 100,
-    maxCSSPropertiesPerNode: -1,  // Unlimited
-    maxColors: 30,
-    maxImages: 30,
-    maxRootNodes: 30,
-    maxNavItems: 20,
-    maxTextCharsPerNode: 200,
+    maxCSSPropertiesPerNode: 50,
+    maxColors: 50,
+    maxImages: 50,
+    maxRootNodes: 100,
+    maxNavItems: 50,
+    maxTextCharsPerNode: 1000,
     includeCSSDetails: true,
     includeAllMetadata: true,
+    enableCSSCompression: true,
+    compressionMinOccurrences: 2,
+  },
+  pro: {
+    maxTokens: 100000,
+    maxCSSClasses: 200,
+    maxCSSPropertiesPerNode: -1,
+    maxColors: 100,
+    maxImages: 100,
+    maxRootNodes: 200,
+    maxNavItems: 100,
+    maxTextCharsPerNode: 2000,
+    includeCSSDetails: true,
+    includeAllMetadata: true,
+    enableCSSCompression: true,
+    compressionMinOccurrences: 2,
   },
   enterprise: {
-    maxTokens: 50000,
-    maxCSSClasses: -1, // unlimited
-    maxCSSPropertiesPerNode: -1,  // Unlimited
+    maxTokens: 200000,
+    maxCSSClasses: -1,
+    maxCSSPropertiesPerNode: -1,
     maxColors: -1,
     maxImages: -1,
     maxRootNodes: -1,
     maxNavItems: -1,
-    maxTextCharsPerNode: -1,  // Unlimited
+    maxTextCharsPerNode: -1,
     includeCSSDetails: true,
     includeAllMetadata: true,
+    enableCSSCompression: false,  // Full values for enterprise users
+    compressionMinOccurrences: 2,
   },
 };
 
@@ -187,13 +200,21 @@ export function simplifyCSSClass(
   };
 }
 
+import { GPTTokens } from 'gpt-tokens';
+
 /**
- * Estimate token count (rough approximation)
- * 1 token ≈ 4 characters for English text
+ * Estimate token count using gpt-tokens
  */
 export function estimateTokens(data: any): number {
-  const jsonString = JSON.stringify(data);
-  return Math.ceil(jsonString.length / 4);
+  const content = typeof data === 'string' ? data : JSON.stringify(data);
+
+  // Use gpt-4o as baseline for token counting (cl100k_base encoding)
+  const usage = new GPTTokens({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content }],
+  });
+
+  return usage.usedTokens;
 }
 
 /**
@@ -225,10 +246,112 @@ function truncateNode(node: RawDOMNode, maxTextChars: number): RawDOMNode {
   };
 }
 
+// ============ CSS Value Compression ============
+
+/**
+ * Get category prefix for a CSS property
+ * c=colors, d=display, p=position, s=spacing, v=other
+ */
+function getCSSPropertyPrefix(property: string): string {
+  const colorProps = ['background-color', 'background', 'color', 'border-color'];
+  const displayProps = ['display'];
+  const positionProps = ['position'];
+  const spacingProps = ['padding', 'margin', 'gap', 'width', 'height', 'max-width', 'min-width', 'max-height', 'min-height'];
+
+  if (colorProps.includes(property)) return 'c';
+  if (displayProps.includes(property)) return 'd';
+  if (positionProps.includes(property)) return 'p';
+  if (spacingProps.includes(property)) return 's';
+  return 'v';
+}
+
+/**
+ * Traverse all nodes in the tree and call callback for each
+ */
+function traverseNodes(nodes: RawDOMNode[], callback: (node: RawDOMNode) => void): void {
+  for (const node of nodes) {
+    callback(node);
+    if (node.children.length > 0) {
+      traverseNodes(node.children, callback);
+    }
+  }
+}
+
+/**
+ * Build a dictionary of repeated CSS values for compression
+ * Only includes values that appear at least minOccurrences times
+ */
+function buildCSSValueDictionary(
+  rootNodes: RawDOMNode[],
+  minOccurrences: number
+): { dictionary: CSSValueDictionary; valueToId: Map<string, string> } {
+  // Step 1: Count frequency of each property:value pair
+  const frequency = new Map<string, number>();
+
+  traverseNodes(rootNodes, (node) => {
+    if (node.cssProperties) {
+      for (const [prop, value] of Object.entries(node.cssProperties)) {
+        const key = `${prop}:${value}`;
+        frequency.set(key, (frequency.get(key) || 0) + 1);
+      }
+    }
+  });
+
+  // Step 2: Build dictionary for high-frequency values
+  const dictionary: CSSValueDictionary = { values: {} };
+  const valueToId = new Map<string, string>();
+  const counters: Record<string, number> = { c: 0, d: 0, p: 0, s: 0, v: 0 };
+
+  // Sort by frequency (highest first) for consistent IDs
+  const sortedEntries = Array.from(frequency.entries())
+    .filter(([, count]) => count >= minOccurrences)
+    .sort((a, b) => b[1] - a[1]);
+
+  for (const [key] of sortedEntries) {
+    const colonIndex = key.indexOf(':');
+    const prop = key.substring(0, colonIndex);
+    const value = key.substring(colonIndex + 1);
+
+    const prefix = getCSSPropertyPrefix(prop);
+    counters[prefix]++;
+    const id = `${prefix}${counters[prefix]}`;
+
+    dictionary.values[id] = value;
+    valueToId.set(key, id);
+  }
+
+  return { dictionary, valueToId };
+}
+
+/**
+ * Compress CSS properties in a node using the dictionary
+ */
+function compressNodeCSS(
+  node: RawDOMNode,
+  valueToId: Map<string, string>
+): RawDOMNode {
+  const compressedProperties: Record<string, string> = {};
+
+  if (node.cssProperties) {
+    for (const [prop, value] of Object.entries(node.cssProperties)) {
+      const key = `${prop}:${value}`;
+      const id = valueToId.get(key);
+      compressedProperties[prop] = id || value; // Use ID if available, else original value
+    }
+  }
+
+  return {
+    ...node,
+    cssProperties: compressedProperties,
+    children: node.children.map(child => compressNodeCSS(child, valueToId)),
+  };
+}
+
 // ============ Main Budget Reducer ============
 
 export interface ReducedParsedDOM extends Omit<RawParsedDOM, 'rawTextContent'> {
   rawTextContent?: string; // Optional now
+  cssValueDictionary?: CSSValueDictionary; // Dictionary for compressed CSS values
   _metadata?: {
     tier: UserTier;
     estimatedTokens: number;
@@ -245,13 +368,52 @@ export function applyTokenBudget(
 ): ReducedParsedDOM {
   const config = TIER_CONFIGS[tier];
 
-  // Apply truncations
-  const reducedData: ReducedParsedDOM = {
-    rootNodes: truncateRootNodes(
-      parsedDOM.rootNodes,
-      config.maxRootNodes,
-      config.maxTextCharsPerNode
-    ),
+  // Initial Reduction based on Tier Config
+  const reducedData = reduceWithConfig(parsedDOM, config);
+  const estimatedTokens = estimateTokens(reducedData);
+
+  // Strict check: Fail if still over budget
+  if (estimatedTokens > config.maxTokens) {
+    throw new ApiError(
+      httpStatus.PAYMENT_REQUIRED,
+      `Page content too large (${estimatedTokens} estimated tokens). The ${tier} tier limit is ${config.maxTokens} tokens. Please upgrade to analyze complex pages.`
+    );
+  }
+
+  // Add metadata
+  reducedData._metadata = {
+    tier,
+    estimatedTokens,
+    wasReduced: estimatedTokens < estimateTokens(parsedDOM),
+  };
+
+  return reducedData;
+}
+
+function reduceWithConfig(parsedDOM: RawParsedDOM, config: TokenBudgetConfig): ReducedParsedDOM {
+  // Step 1: Truncate root nodes
+  let rootNodes = truncateRootNodes(
+    parsedDOM.rootNodes,
+    config.maxRootNodes,
+    config.maxTextCharsPerNode
+  );
+
+  // Step 2: Apply CSS value compression if enabled
+  let cssValueDictionary: CSSValueDictionary | undefined;
+  if (config.enableCSSCompression) {
+    const { dictionary, valueToId } = buildCSSValueDictionary(
+      rootNodes,
+      config.compressionMinOccurrences
+    );
+    // Only use dictionary if it has entries (saves overhead for small pages)
+    if (Object.keys(dictionary.values).length > 0) {
+      cssValueDictionary = dictionary;
+      rootNodes = rootNodes.map(node => compressNodeCSS(node, valueToId));
+    }
+  }
+
+  return {
+    rootNodes,
     totalNodes: parsedDOM.totalNodes,
     navigation: parsedDOM.navigation.slice(0, config.maxNavItems === -1 ? undefined : config.maxNavItems),
     allForms: parsedDOM.allForms,
@@ -276,25 +438,14 @@ export function applyTokenBudget(
       classes: config.includeCSSDetails
         ? truncateCSSClasses(parsedDOM.cssInfo.classes, config.maxCSSClasses)
         : truncateCSSClasses(parsedDOM.cssInfo.classes, config.maxCSSClasses).map(
-            cls => simplifyCSSClass(cls, false)
-          ),
+          cls => simplifyCSSClass(cls, false)
+        ),
     },
+    cssValueDictionary,
+    rawTextContent: (config.includeAllMetadata && parsedDOM.rawTextContent)
+      ? parsedDOM.rawTextContent.slice(0, 1000)
+      : undefined
   };
-
-  // Optionally include raw text (truncated)
-  if (config.includeAllMetadata && parsedDOM.rawTextContent) {
-    reducedData.rawTextContent = parsedDOM.rawTextContent.slice(0, 1000);
-  }
-
-  // Add metadata
-  const estimatedTokens = estimateTokens(reducedData);
-  reducedData._metadata = {
-    tier,
-    estimatedTokens,
-    wasReduced: estimatedTokens < estimateTokens(parsedDOM),
-  };
-
-  return reducedData;
 }
 
 // ============ Custom Budget ============
@@ -311,45 +462,8 @@ export function applyCustomBudget(
     ...customConfig,
   };
 
-  // Same logic as applyTokenBudget but with custom config
-  const reducedData: ReducedParsedDOM = {
-    rootNodes: truncateRootNodes(
-      parsedDOM.rootNodes,
-      config.maxRootNodes,
-      config.maxTextCharsPerNode
-    ),
-    totalNodes: parsedDOM.totalNodes,
-    navigation: parsedDOM.navigation.slice(0, config.maxNavItems === -1 ? undefined : config.maxNavItems),
-    allForms: parsedDOM.allForms,
-    allImages: truncateImages(parsedDOM.allImages, config.maxImages),
-    colors: truncateColors(parsedDOM.colors, config.maxColors),
-    fonts: parsedDOM.fonts,
-    ctas: parsedDOM.ctas,
-    footer: parsedDOM.footer,
-    socialLinks: parsedDOM.socialLinks,
-    embeds: parsedDOM.embeds,
-    metadata: config.includeAllMetadata ? parsedDOM.metadata : {
-      title: parsedDOM.metadata.title,
-      description: parsedDOM.metadata.description,
-      ogTags: {},
-    },
-    language: parsedDOM.language,
-    cssInfo: {
-      gridColumns: parsedDOM.cssInfo.gridColumns,
-      flexColumns: parsedDOM.cssInfo.flexColumns,
-      breakpoints: parsedDOM.cssInfo.breakpoints,
-      hasResponsiveGrid: parsedDOM.cssInfo.hasResponsiveGrid,
-      classes: config.includeCSSDetails
-        ? truncateCSSClasses(parsedDOM.cssInfo.classes, config.maxCSSClasses)
-        : truncateCSSClasses(parsedDOM.cssInfo.classes, config.maxCSSClasses).map(
-            cls => simplifyCSSClass(cls, false)
-          ),
-    },
-  };
-
-  if (config.includeAllMetadata && parsedDOM.rawTextContent) {
-    reducedData.rawTextContent = parsedDOM.rawTextContent.slice(0, 1000);
-  }
+  // Use shared reduceWithConfig to avoid code duplication
+  const reducedData = reduceWithConfig(parsedDOM, config);
 
   const estimatedTokens = estimateTokens(reducedData);
   reducedData._metadata = {

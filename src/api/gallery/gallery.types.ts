@@ -7,8 +7,16 @@ import { AuthProvider } from '../auth/auth.types';
 // ============================================
 // Gallery Subscription Tiers
 // ============================================
-export const GALLERY_SUBSCRIPTION_TIERS = ['free', 'premium'] as const;
+export const GALLERY_SUBSCRIPTION_TIERS = ['free', 'pro'] as const;
 export type GallerySubscriptionTier = typeof GALLERY_SUBSCRIPTION_TIERS[number];
+
+// ============================================
+// Token Quota Limits (per week)
+// ============================================
+export const QUOTA_LIMITS: Record<GallerySubscriptionTier, number> = {
+  free: 100_000,   // 100K tokens/week
+  pro: 400_000,    // 400K tokens/week
+} as const;
 
 // ============================================
 // Gallery Subscription Status
@@ -338,3 +346,143 @@ export const GALLERY_PASSWORD_MAX_LENGTH = 128;
 // ============================================
 export const FREE_USER_DOWNLOAD_COOLDOWN_DAYS = 3;
 export const FREE_USER_DOWNLOAD_COOLDOWN_MS = FREE_USER_DOWNLOAD_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+
+// ============================================
+// Token Transaction Types
+// ============================================
+export const TOKEN_TRANSACTION_TYPES = ['analysis', 'reset', 'bonus', 'refund'] as const;
+export type TokenTransactionType = typeof TOKEN_TRANSACTION_TYPES[number];
+
+// ============================================
+// Gallery Token Usage Interface
+// ============================================
+export interface IGalleryTokenUsage {
+  id: string;
+  userId: string;
+  tokensUsed: number;
+  quotaPeriodStart: Date;
+  quotaPeriodEnd: Date;
+  totalTokensUsed: number;
+  analysisCount: number;
+  totalAnalysisCount: number;
+  lastAnalysisAt?: Date;
+  lastAnalysisUrl?: string;
+  lastAnalysisTokens?: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ============================================
+// Gallery Token Transaction Interface
+// ============================================
+export interface IGalleryTokenTransaction {
+  id: string;
+  userId: string;
+  type: TokenTransactionType;
+  tokensAmount: number;
+  tokensBefore: number;
+  tokensAfter: number;
+  analysisUrl?: string;
+  analysisId?: string;
+  description?: string;
+  metadata: Record<string, any>;
+  createdAt: Date;
+}
+
+// ============================================
+// Quota Status Response
+// ============================================
+export interface QuotaStatus {
+  tier: GallerySubscriptionTier;
+  quota: {
+    limit: number;
+    used: number;
+    remaining: number;
+    periodStart: Date;
+    periodEnd: Date;
+    analysisCount: number;
+  };
+  lifetime: {
+    totalTokensUsed: number;
+    totalAnalyses: number;
+  };
+}
+
+// ============================================
+// Quota Check Result
+// ============================================
+export interface QuotaCheckResult {
+  sufficient: boolean;
+  remaining: number;
+  required: number;
+  shortfall?: number;
+}
+
+// ============================================
+// Analysis Estimate Response
+// ============================================
+export interface AnalysisEstimate {
+  estimatedTokens: number;
+  quota: QuotaCheckResult;
+  requiresConfirmation: boolean;
+  message: string;
+}
+
+// ============================================
+// Token Deduction Metadata
+// ============================================
+export interface TokenDeductionMetadata {
+  analysisUrl: string;
+  analysisId?: string;
+  model?: string;
+}
+
+// ============================================
+// Gallery Analysis Status
+// ============================================
+export const ANALYSIS_STATUS = ['pending', 'processing', 'completed', 'failed'] as const;
+export type AnalysisStatus = typeof ANALYSIS_STATUS[number];
+
+// ============================================
+// Gallery Analysis Interface
+// ============================================
+export interface IGalleryAnalysis {
+  id: string;
+  userId: string;
+
+  // Input
+  url: string;
+
+  // Output
+  prompt?: string;
+
+  // Metadata
+  tokensUsed: number;
+  status: AnalysisStatus;
+  metadata: Record<string, any>;
+
+  // Page info
+  pageTitle?: string;
+  pageDescription?: string;
+  screenshotUrl?: string;
+
+  // Timestamps
+  createdAt: Date;
+  completedAt?: Date;
+  deletedAt?: Date;
+}
+
+// ============================================
+// Analysis History Item (for API response)
+// ============================================
+export interface AnalysisHistoryItem {
+  id: string;
+  url: string;
+  pageTitle?: string;
+  pageDescription?: string;
+  screenshotUrl?: string;
+  tokensUsed: number;
+  status: AnalysisStatus;
+  createdAt: Date;
+  completedAt?: Date;
+}

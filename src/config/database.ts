@@ -16,7 +16,7 @@ export const pgPool = new Proxy({} as Pool, {
         max: 20,
         idleTimeoutMillis: env.POSTGRES_IDLE_TIMEOUT,
         connectionTimeoutMillis: env.POSTGRES_CONNECTION_TIMEOUT,
-        ssl: env.POSTGRES_SSL ? { rejectUnauthorized: env.POSTGRES_REJECT_UNAUTHORIZED } : false
+        ssl: true
       });
     }
     return (_pgPool as any)[prop];

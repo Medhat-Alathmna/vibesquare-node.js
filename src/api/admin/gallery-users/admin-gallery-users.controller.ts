@@ -144,5 +144,72 @@ export const adminGalleryUsersController = {
     const stats = await adminGalleryUsersService.getStatistics();
 
     res.json(ApiResponse.success(stats));
+  }),
+
+  // ==================== QUOTA MANAGEMENT ====================
+
+  /**
+   * Get user's token quota
+   * GET /api/admin/gallery-users/:id/quota
+   */
+  getUserQuota: asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const quota = await adminGalleryUsersService.getUserQuota(id);
+
+    res.json(ApiResponse.success(quota));
+  }),
+
+  /**
+   * Get user's quota history
+   * GET /api/admin/gallery-users/:id/quota/history
+   */
+  getUserQuotaHistory: asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { page = 1, limit = 50 } = req.query;
+
+    const history = await adminGalleryUsersService.getUserQuotaHistory(
+      id,
+      Number(page),
+      Number(limit)
+    );
+
+    res.json(ApiResponse.success(history));
+  }),
+
+  /**
+   * Reset user's quota
+   * POST /api/admin/gallery-users/:id/quota/reset
+   */
+  resetUserQuota: asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const result = await adminGalleryUsersService.resetUserQuota(id, reason);
+
+    res.json(ApiResponse.success(result, result.message));
+  }),
+
+  /**
+   * Add bonus tokens to user
+   * POST /api/admin/gallery-users/:id/quota/add-tokens
+   */
+  addBonusTokens: asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { amount, reason } = req.body;
+
+    const result = await adminGalleryUsersService.addBonusTokens(id, amount, reason);
+
+    res.json(ApiResponse.success(result, result.message));
+  }),
+
+  /**
+   * Get quota statistics across all users
+   * GET /api/admin/gallery-users/quota-statistics
+   */
+  getQuotaStatistics: asyncHandler(async (req: Request, res: Response) => {
+    const stats = await adminGalleryUsersService.getQuotaStatistics();
+
+    res.json(ApiResponse.success(stats));
   })
 };

@@ -1,6 +1,7 @@
+import { v4 as uuidv4 } from 'uuid';
 import { Project } from '../../../api/project/project.model';
 import { IProjectRepository, ProjectData, ProjectsResult } from '../interfaces';
-import { ProjectQueryOptions, SearchOptions, SortOption } from '../../types';
+import { ProjectQueryOptions, SearchOptions, SortOption, CreateProjectDTO, UpdateProjectDTO } from '../../types';
 
 export class MongoProjectRepository implements IProjectRepository {
   private getSortOption(sortBy: SortOption): Record<string, 1 | -1> {
@@ -101,5 +102,37 @@ export class MongoProjectRepository implements IProjectRepository {
       { new: true }
     ).lean();
     return project as unknown as ProjectData | null;
+  }
+
+  async create(data: CreateProjectDTO): Promise<ProjectData> {
+    const projectData = {
+      id: uuidv4(),
+      ...data,
+      screenshots: data.screenshots || [],
+      tags: data.tags || [],
+      styles: data.styles || [],
+      codeFiles: data.codeFiles || [],
+      collectionIds: [],
+      likes: 0,
+      views: 0,
+      downloads: 0
+    };
+
+    const project = await Project.create(projectData);
+    return project.toObject() as unknown as ProjectData;
+  }
+
+  async update(id: string, data: UpdateProjectDTO): Promise<ProjectData | null> {
+    const project = await Project.findOneAndUpdate(
+      { id },
+      { $set: data },
+      { new: true }
+    ).lean();
+    return project as unknown as ProjectData | null;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    const result = await Project.deleteOne({ id });
+    return result.deletedCount > 0;
   }
 }

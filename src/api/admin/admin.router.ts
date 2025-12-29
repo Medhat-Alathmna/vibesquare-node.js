@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { usersRouter } from './users';
 import { rolesRouter } from './roles';
 import { adminGalleryUsersRouter } from './gallery-users';
+import { adminProjectsRouter } from './projects';
 import { rolesController } from './roles/roles.controller';
 import { authenticate, requireAdminAccess, requirePermission } from '../../middleware/auth.middleware';
 
@@ -15,6 +16,9 @@ router.use('/roles', rolesRouter);
 
 // Gallery Users management
 router.use('/gallery-users', adminGalleryUsersRouter);
+
+// Projects management
+router.use('/projects', adminProjectsRouter);
 
 // Permissions routes (separate from roles for easier access)
 router.get(

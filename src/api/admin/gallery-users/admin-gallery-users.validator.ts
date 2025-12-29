@@ -69,5 +69,36 @@ export const adminGalleryUsersValidator = {
         isActive: Joi.boolean().optional()
       }).optional()
     })
+  },
+
+  // ==================== QUOTA MANAGEMENT ====================
+
+  quotaHistory: {
+    params: Joi.object({
+      id: Joi.string().required()
+    }),
+    query: Joi.object({
+      page: Joi.number().integer().min(1).default(1),
+      limit: Joi.number().integer().min(1).max(100).default(50)
+    })
+  },
+
+  resetQuota: {
+    params: Joi.object({
+      id: Joi.string().required()
+    }),
+    body: Joi.object({
+      reason: Joi.string().min(1).max(500).required()
+    })
+  },
+
+  addBonusTokens: {
+    params: Joi.object({
+      id: Joi.string().required()
+    }),
+    body: Joi.object({
+      amount: Joi.number().integer().min(1).max(1000000).required(),
+      reason: Joi.string().min(1).max(500).required()
+    })
   }
 };

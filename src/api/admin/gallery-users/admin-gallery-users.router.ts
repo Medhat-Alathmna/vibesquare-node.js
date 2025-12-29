@@ -34,6 +34,17 @@ router.post(
 );
 
 /**
+ * @route GET /api/admin/gallery-users/quota-statistics
+ * @desc Get quota statistics across all users
+ * @access Admin (gallery_users.read)
+ */
+router.get(
+  '/quota-statistics',
+  requirePermission('gallery_users.read'),
+  adminGalleryUsersController.getQuotaStatistics
+);
+
+/**
  * @route GET /api/admin/gallery-users
  * @desc List gallery users with pagination
  * @access Admin (gallery_users.read)
@@ -139,6 +150,56 @@ router.post(
   requirePermission('gallery_users.manage'),
   validate(adminGalleryUsersValidator.sendNotification),
   adminGalleryUsersController.sendNotification
+);
+
+// ==================== QUOTA MANAGEMENT ====================
+
+/**
+ * @route GET /api/admin/gallery-users/:id/quota
+ * @desc Get user's token quota
+ * @access Admin (gallery_users.read)
+ */
+router.get(
+  '/:id/quota',
+  requirePermission('gallery_users.read'),
+  validate(adminGalleryUsersValidator.userId),
+  adminGalleryUsersController.getUserQuota
+);
+
+/**
+ * @route GET /api/admin/gallery-users/:id/quota/history
+ * @desc Get user's quota transaction history
+ * @access Admin (gallery_users.read)
+ */
+router.get(
+  '/:id/quota/history',
+  requirePermission('gallery_users.read'),
+  validate(adminGalleryUsersValidator.quotaHistory),
+  adminGalleryUsersController.getUserQuotaHistory
+);
+
+/**
+ * @route POST /api/admin/gallery-users/:id/quota/reset
+ * @desc Reset user's quota
+ * @access Admin (gallery_users.manage)
+ */
+router.post(
+  '/:id/quota/reset',
+  requirePermission('gallery_users.manage'),
+  validate(adminGalleryUsersValidator.resetQuota),
+  adminGalleryUsersController.resetUserQuota
+);
+
+/**
+ * @route POST /api/admin/gallery-users/:id/quota/add-tokens
+ * @desc Add bonus tokens to user
+ * @access Admin (gallery_users.manage)
+ */
+router.post(
+  '/:id/quota/add-tokens',
+  requirePermission('gallery_users.manage'),
+  validate(adminGalleryUsersValidator.addBonusTokens),
+  adminGalleryUsersController.addBonusTokens
 );
 
 export const adminGalleryUsersRouter = router;

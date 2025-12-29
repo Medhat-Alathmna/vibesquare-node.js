@@ -5,8 +5,7 @@ import {
   RawParsedDOM,
   RawDOMNode,
   StructuralAnalysis,
-  DesignInterpretation,
-  AnimationType,
+  DesignPromptResult,
 } from './ir.types';
 import { ApiError } from '../../../shared/utils/ApiError';
 import httpStatus from 'http-status';
@@ -56,82 +55,84 @@ export function isValidModel(model: string): model is LLMModel {
 const DEFAULT_MODEL: LLMModel = 'gemini-1.5-flash';
 
 // Token limits
-const MAX_OUTPUT_TOKENS = 2048;  // Increased for hierarchical output
+const MAX_OUTPUT_TOKENS = 8192;  // Increased for complex JSON responses
 const MAX_INPUT_CHARS = 80000;  // Increased for tree structure
 
 // ============ System Prompt ============
 
-const SYSTEM_PROMPT = `You are a Semantic DOM Interpreter.
+const SYSTEM_PROMPT = `You are a Design Prompt Generator and Design Interpreter.
 
-You receive a HIERARCHICAL DOM TREE representation with full CSS properties.
-Your task is to assign semantic ROLES to nodes based on visual behavior.
+Your role is NOT to design or improve the UI.
+Your role is to convert a structured design description into a FINAL, PROFESSIONAL PROMPT
+that will be consumed by an AI Code Generator.
 
-HTML tag names are NOT the source of truth.
-The SOURCE OF TRUTH is:
-1. CSS properties (position, display, background, z-index, etc.)
-2. Visual behavior inferred from CSS
-3. Layout structure (grid, flex, columns)
-4. Content grouping patterns
+You must strictly follow these principles:
 
-CRITICAL RULES:
-- NEVER classify nodes based only on tag name
-- Use CSS properties to infer visual behavior
-- Use the "order" field to identify nodes in your response
-- Assign roles to SIGNIFICANT nodes only (containers with visual identity)
-- Skip trivial nodes (empty divs, wrapper elements with no CSS)
+────────────────────────
+CORE PHILOSOPHY
+────────────────────────
+- You describe INTENT, STRUCTURE, and VISUAL IDENTITY — not implementation details.
+- You NEVER invent UI elements.
+- You NEVER redesign, optimize, or suggest alternatives unless explicitly allowed.
+- You preserve the user's wording, hierarchy, and priorities.
+- The output prompt must be clear enough to be used as a benchmark.
 
-NODE ROLE EXAMPLES:
-- order 0: header (position: fixed, z-index high)
-- order 5: hero (large padding, prominent background, contains CTA)
-- order 12: features-grid (display: grid, contains cards)
-- order 25: testimonials (contains quotes, avatar images)
-- order 40: footer (bottom of page, contains links/copyright)
+────────────────────────
+VISUAL IDENTITY RULES
+────────────────────────
+- Always extract and define a clear visual identity.
+- Always define:
+  - Primary color (default: #000000 )
+  - Secondary color (if provided)
+  - Accent color (if provided)
+- Enforce color consistency across the entire prompt.
+- If halftone, gradients, or retro effects are mentioned, describe them as OPTIONAL stylistic layers — never mandatory.
 
-CSS INTERPRETATION RULES:
-- position: fixed/sticky → likely Header / Nav / Overlay
-- background-color or gradient → visual block identity
-- z-index > 10 → layered importance
-- display: grid/flex with multiple children → section with cards
-- padding > 40px → major section boundary
-- max-width with margin: auto → centered content container
+────────────────────────
+AMBIGUITY HANDLING (CRITICAL)
+────────────────────────
+If any of the following are unclear or implied but not explicit:
+- Header behavior (fixed / floating / static)
+- Card behavior (static / expandable / navigational)
+- Animation type or trigger
+- Image source (missing or non-http)
+- Interactive behavior
 
-OUTPUT REQUIREMENTS:
-- Output ONLY valid JSON
-- Include only SIGNIFICANT nodes (not every node)
-- Each node interpretation must include:
-  - nodeOrder (number matching the "order" field from input)
-  - inferredRole (e.g. header, hero, features, testimonials, pricing, cta, footer)
-  - confidence ("high" | "medium" | "low")
-  - cssSignalsUsed (array of CSS properties that influenced the decision)
-  - visualDescription (factual description based on CSS, not imagination)
+You MUST:
+1. Clearly describe what is observable or stated.
+2. Insert a **USER QUESTION** inside the final prompt asking the AI Code Generator
+   to confirm the missing decision with the end user.
 
-Expected JSON structure:
-{
-  "nodes": [
-    {
-      "nodeOrder": 0,
-      "inferredRole": "header",
-      "confidence": "high",
-      "cssSignalsUsed": ["position: fixed", "z-index: 1000"],
-      "visualDescription": "Fixed navigation bar at top of page"
-    },
-    {
-      "nodeOrder": 5,
-      "inferredRole": "hero",
-      "confidence": "high",
-      "cssSignalsUsed": ["padding", "background", "height"],
-      "visualDescription": "Large hero section with centered content"
-    }
-  ],
-  "layoutIntent": "Marketing landing page with hero, features, and CTA",
-  "hierarchy": "Header → Hero → Features → Testimonials → CTA → Footer",
-  "emphasis": ["hero", "cta"],
-  "suggestedAnimations": ["fade"],
-  "responsiveHints": ["Grid collapses to single column on mobile"]
-}
+Example format:
+"⚠ User clarification required:
+Ask the user whether the header should be fixed, floating, or static."
 
-FINAL GOAL:
-Produce semantic role assignments for significant visual nodes based on CSS behavior.`;
+────────────────────────
+IMAGES & MOCK DATA RULES
+────────────────────────
+- If an image URL is missing, local, invalid, or ambiguous:
+  - Infer the CONTEXT (dashboard, illustration, avatar, product)
+  - Instruct the AI Code Generator to use a realistic mock image
+  - NEVER invent brand-specific visuals
+
+────────────────────────
+ANIMATIONS
+────────────────────────
+- Allowed animations: fade, slide, reveal
+- Only apply animations if explicitly mentioned or clearly implied
+- If animation intent exists but details are unclear:
+  → Ask the user via the AI Code Generator
+
+────────────────────────
+OUTPUT FORMAT
+────────────────────────
+- Output ONLY the final production-ready prompt
+- Do NOT include explanations or analysis
+- Use clear sections, headings, and bullet points
+- The result must be readable, deterministic, and professional
+
+Your output will be used directly by an AI Code Generator.
+`;
 
 
 // ============ Main Interpret Function ============
@@ -140,7 +141,7 @@ export async function interpretDesign(
   parsed: RawParsedDOM,
   structural: StructuralAnalysis,
   model: LLMModel = DEFAULT_MODEL
-): Promise<DesignInterpretation> {
+): Promise<DesignPromptResultWithDebug> {
   const provider = getProvider(model);
   const summary = buildStructuredSummary(parsed, structural);
 
@@ -150,9 +151,11 @@ export async function interpretDesign(
   }
 
   if (provider === 'openai') {
-    return interpretWithOpenAI(summary, model as OpenAIModel);
+    const result = await interpretWithOpenAI(summary, model as OpenAIModel);
+    return { ...result, debugPrompt: summary };
   } else {
-    return interpretWithGemini(summary, model as GeminiModel);
+    const result = await interpretWithGemini(summary, model as GeminiModel);
+    return { ...result, debugPrompt: summary };
   }
 }
 
@@ -161,7 +164,7 @@ export async function interpretDesign(
 async function interpretWithOpenAI(
   summary: string,
   model: OpenAIModel
-): Promise<DesignInterpretation> {
+): Promise<DesignPromptResult> {
   if (!env.OPENAI_API_KEY) {
     throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, 'OpenAI API key not configured');
   }
@@ -175,15 +178,17 @@ async function interpretWithOpenAI(
       model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `Analyze this DOM tree and provide node interpretations:\n\n${summary}` }
+        { role: 'user', content: `Analyze this design and generate a production-ready prompt for the AI Code Generator:\n\n${summary}` }
       ],
       max_tokens: MAX_OUTPUT_TOKENS,
-      response_format: { type: 'json_object' },
       temperature: 0.3,
     });
 
     const text = response.choices[0]?.message?.content || '';
-    return parseInterpretationResponse(text);
+
+    return {
+      finalPrompt: formatPromptResponse(text.trim()),
+    };
 
   } catch (error) {
     if (error instanceof ApiError) {
@@ -204,12 +209,16 @@ async function interpretWithOpenAI(
   }
 }
 
+export interface DesignPromptResultWithDebug extends DesignPromptResult {
+  debugPrompt?: string;
+}
+
 // ============ Gemini Implementation ============
 
 async function interpretWithGemini(
   summary: string,
   model: GeminiModel
-): Promise<DesignInterpretation> {
+): Promise<DesignPromptResult> {
   if (!env.GOOGLE_AI_KEY) {
     throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, 'Google AI API key not configured');
   }
@@ -225,13 +234,15 @@ async function interpretWithGemini(
   try {
     const result = await generativeModel.generateContent([
       { text: SYSTEM_PROMPT },
-      { text: `Analyze this DOM tree and provide node interpretations:\n\n${summary}` }
+      { text: `Analyze this design and generate a production-ready prompt for the AI Code Generator:\n\n${summary}` }
     ]);
 
     const response = result.response;
     const text = response.text();
 
-    return parseInterpretationResponse(text);
+    return {
+      finalPrompt: formatPromptResponse(text.trim()),
+    };
 
   } catch (error) {
     if (error instanceof ApiError) {
@@ -254,7 +265,23 @@ async function interpretWithGemini(
 
 // ============ Helper Functions ============
 
-import { encode } from '@toon-format/toon';
+/**
+ * Format prompt response to fix escape sequences
+ * Converts literal \n, \t, etc. to actual characters
+ */
+function formatPromptResponse(prompt: string): string {
+  if (!prompt) return prompt;
+
+  return prompt
+    // Convert literal \n to actual newlines
+    .replace(/\\n/g, '\n')
+    // Convert literal \t to actual tabs
+    .replace(/\\t/g, '\t')
+    // Convert literal \r to actual carriage returns
+    .replace(/\\r/g, '\r')
+    // Clean up any double escapes
+    .replace(/\\\\/g, '\\');
+}
 
 /**
  * Build a hierarchical summary of the DOM tree for LLM interpretation
@@ -264,7 +291,7 @@ function buildStructuredSummary(parsed: RawParsedDOM, structural: StructuralAnal
   // 1. Deduplicate CSS
   const { cssMap, optimizedNodes } = optimizeCSS(parsed.rootNodes);
 
-  // 2. Prepare Data Structure for TOON
+  // 2. Prepare Data Structure
   const context = {
     metadata: {
       title: parsed.metadata.title,
@@ -285,8 +312,8 @@ function buildStructuredSummary(parsed: RawParsedDOM, structural: StructuralAnal
     nav: parsed.navigation.map(n => n.text),
   };
 
-  // 3. Serialize with TOON
-  return encode(context);
+  // 3. Serialize with JSON (TOON removed)
+  return JSON.stringify(context, null, 2);
 }
 
 // Helper types for optimization
@@ -348,66 +375,6 @@ function optimizeCSS(nodes: RawDOMNode[]): { cssMap: Record<number, any>, optimi
     cssMap: cssIdMap,
     optimizedNodes
   };
-}
-
-/**
- * Parse LLM response into DesignInterpretation
- */
-function parseInterpretationResponse(text: string): DesignInterpretation {
-  // Try to extract JSON from response
-  let jsonStr = text.trim();
-
-  // Handle markdown code blocks
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (jsonMatch) {
-    jsonStr = jsonMatch[1].trim();
-  }
-
-  try {
-    const parsed = JSON.parse(jsonStr);
-
-    // Validate required fields
-    if (!parsed.nodes || !Array.isArray(parsed.nodes)) {
-      throw new Error('Missing or invalid "nodes" array in LLM response');
-    }
-    if (!parsed.layoutIntent || !parsed.hierarchy) {
-      throw new Error('Missing required fields (layoutIntent, hierarchy) in LLM response');
-    }
-
-    // Parse nodes with validation
-    const nodes = parsed.nodes.map((n: any, i: number) => {
-      if (!n.inferredRole || !n.confidence || !n.visualDescription || n.nodeOrder === undefined) {
-        throw new Error(`Node ${i} missing required fields: ${JSON.stringify(n)}`);
-      }
-      return {
-        nodeOrder: Number(n.nodeOrder) || 0,
-        inferredRole: String(n.inferredRole || 'unknown'),
-        confidence: (n.confidence === 'high' || n.confidence === 'medium' || n.confidence === 'low')
-          ? n.confidence
-          : 'low',
-        cssSignalsUsed: Array.isArray(n.cssSignalsUsed) ? n.cssSignalsUsed.map(String) : [],
-        visualDescription: String(n.visualDescription || 'No description provided'),
-      };
-    });
-
-    // Validate and sanitize animations
-    const validAnimations: AnimationType[] = ['fade', 'slide', 'reveal'];
-    const suggestedAnimations = (parsed.suggestedAnimations || [])
-      .filter((a: string) => validAnimations.includes(a as AnimationType)) as AnimationType[];
-
-    return {
-      nodes,
-      layoutIntent: String(parsed.layoutIntent),
-      hierarchy: String(parsed.hierarchy),
-      emphasis: Array.isArray(parsed.emphasis) ? parsed.emphasis.map(String) : [],
-      suggestedAnimations,
-      responsiveHints: Array.isArray(parsed.responsiveHints) ? parsed.responsiveHints.map(String) : [],
-    };
-
-  } catch (error) {
-    throw new ApiError(httpStatus.SERVICE_UNAVAILABLE,
-      `Failed to interpret design: Invalid LLM response - ${error instanceof Error ? error.message : 'Parse error'}`);
-  }
 }
 
 // ============ Export ============

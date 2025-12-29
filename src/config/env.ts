@@ -22,7 +22,7 @@ const envSchema = Joi.object({
   POSTGRES_SSL: Joi.boolean().default(false).description('Whether to use SSL for PostgreSQL'),
   POSTGRES_REJECT_UNAUTHORIZED: Joi.boolean().default(true).description('Whether to reject unauthorized SSL certificates'),
   POSTGRES_CONNECTION_TIMEOUT: Joi.number().default(30000).description('PostgreSQL connection timeout in milliseconds'),
-  POSTGRES_IDLE_TIMEOUT: Joi.number().default(30000).description('PostgreSQL idle timeout in milliseconds'),
+  POSTGRES_IDLE_TIMEOUT: Joi.number().default(999999999).description('PostgreSQL idle timeout in milliseconds'),
 
   // JWT Configuration
   JWT_SECRET: Joi.string().min(32).default('your-super-secret-jwt-key-change-in-production-min-32-chars'),
@@ -50,6 +50,12 @@ const envSchema = Joi.object({
   RATE_LIMIT_MAX_REQUESTS: Joi.number().default(100),
   LOGIN_RATE_LIMIT_MAX: Joi.number().default(5),
   ACCOUNT_LOCKOUT_MINUTES: Joi.number().default(30),
+
+  // Stripe
+  STRIPE_SECRET_KEY: Joi.string().optional().allow(''),
+  STRIPE_PUBLISHABLE_KEY: Joi.string().optional().allow(''),
+  STRIPE_WEBHOOK_SECRET: Joi.string().optional().allow(''),
+  STRIPE_PRO_PRICE_ID: Joi.string().optional().allow(''),
 
   // Default Admin
   DEFAULT_ADMIN_EMAIL: Joi.string().email().default('admin@vibesquare.io'),
@@ -109,6 +115,12 @@ export const env = {
   RATE_LIMIT_MAX_REQUESTS: envVars.RATE_LIMIT_MAX_REQUESTS as number,
   LOGIN_RATE_LIMIT_MAX: envVars.LOGIN_RATE_LIMIT_MAX as number,
   ACCOUNT_LOCKOUT_MINUTES: envVars.ACCOUNT_LOCKOUT_MINUTES as number,
+
+  // Stripe
+  STRIPE_SECRET_KEY: envVars.STRIPE_SECRET_KEY as string,
+  STRIPE_PUBLISHABLE_KEY: envVars.STRIPE_PUBLISHABLE_KEY as string,
+  STRIPE_WEBHOOK_SECRET: envVars.STRIPE_WEBHOOK_SECRET as string,
+  STRIPE_PRO_PRICE_ID: envVars.STRIPE_PRO_PRICE_ID as string,
 
   // Default Admin
   DEFAULT_ADMIN_EMAIL: envVars.DEFAULT_ADMIN_EMAIL as string,

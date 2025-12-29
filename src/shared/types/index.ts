@@ -57,3 +57,56 @@ export interface SearchOptions extends ProjectQueryOptions {
   frameworks?: Framework[];
   categories?: Category[];
 }
+
+// Builder Social Links interface
+export interface BuilderSocialLinks {
+  github?: string;
+  twitter?: string;
+  linkedin?: string;
+  portfolio?: string;
+}
+
+// Builder interface
+export interface Builder {
+  userId?: string;
+  name: string;
+  avatarUrl?: string;
+}
+
+// Create Project DTO
+export interface CreateProjectDTO {
+  title: string;
+  description: string;
+  shortDescription: string;
+  thumbnail: string;
+  screenshots?: string[];
+  demoUrl?: string;
+  downloadUrl?: string;
+  prompt: Prompt;
+  framework: Framework;
+  tags?: string[];
+  styles?: string[];
+  category: Category;
+  codeFiles?: CodeFile[];
+  builder?: Builder;
+  builderSocialLinks?: BuilderSocialLinks;
+}
+
+// Update Project DTO
+export interface UpdateProjectDTO {
+  title?: string;
+  description?: string;
+  shortDescription?: string;
+  thumbnail?: string;
+  screenshots?: string[];
+  demoUrl?: string;
+  downloadUrl?: string;
+  prompt?: Prompt;
+  framework?: Framework;
+  tags?: string[];
+  styles?: string[];
+  category?: Category;
+  codeFiles?: CodeFile[];
+  builder?: Builder;
+  builderSocialLinks?: BuilderSocialLinks;
+}

@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { FRAMEWORKS, CATEGORIES, Framework, Category, Prompt, CodeFile } from '../../shared/types';
+import { FRAMEWORKS, CATEGORIES, Framework, Category, Prompt, CodeFile, Builder, BuilderSocialLinks } from '../../shared/types';
 
 // CodeFile subdocument schema
 const CodeFileSchema = new Schema({
@@ -15,6 +15,21 @@ const PromptSchema = new Schema({
   model: { type: String, required: true },
   version: { type: String },
   parameters: { type: Schema.Types.Mixed }
+}, { _id: false });
+
+// Builder subdocument schema
+const BuilderSchema = new Schema({
+  userId: { type: String },
+  name: { type: String, required: true },
+  avatarUrl: { type: String }
+}, { _id: false });
+
+// BuilderSocialLinks subdocument schema
+const BuilderSocialLinksSchema = new Schema({
+  github: { type: String },
+  twitter: { type: String },
+  linkedin: { type: String },
+  portfolio: { type: String }
 }, { _id: false });
 
 export interface IProject extends Document {
@@ -38,6 +53,8 @@ export interface IProject extends Document {
   updatedAt: Date;
   collectionIds: string[];
   codeFiles: CodeFile[];
+  builder?: Builder;
+  builderSocialLinks?: BuilderSocialLinks;
 }
 
 const ProjectSchema = new Schema<IProject>({
@@ -58,7 +75,9 @@ const ProjectSchema = new Schema<IProject>({
   views: { type: Number, default: 0 },
   downloads: { type: Number, default: 0 },
   collectionIds: [{ type: String }],
-  codeFiles: [CodeFileSchema]
+  codeFiles: [CodeFileSchema],
+  builder: { type: BuilderSchema },
+  builderSocialLinks: { type: BuilderSocialLinksSchema }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

@@ -1,4 +1,4 @@
-import { ProjectQueryOptions, SearchOptions, PaginationResult, SortOption } from '../types';
+import { ProjectQueryOptions, SearchOptions, PaginationResult, SortOption, CreateProjectDTO, UpdateProjectDTO, Builder, BuilderSocialLinks } from '../types';
 
 // Project types
 export interface ProjectData {
@@ -32,6 +32,8 @@ export interface ProjectData {
     content: string;
     path?: string;
   }>;
+  builder?: Builder;
+  builderSocialLinks?: BuilderSocialLinks;
 }
 
 export interface ProjectsResult {
@@ -62,6 +64,9 @@ export interface IProjectRepository {
   search(options: SearchOptions): Promise<ProjectsResult>;
   findById(id: string): Promise<ProjectData | null>;
   incrementStat(id: string, field: 'views' | 'likes' | 'downloads'): Promise<ProjectData | null>;
+  create(data: CreateProjectDTO): Promise<ProjectData>;
+  update(id: string, data: UpdateProjectDTO): Promise<ProjectData | null>;
+  delete(id: string): Promise<boolean>;
 }
 
 export interface ICollectionRepository {

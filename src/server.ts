@@ -1,11 +1,15 @@
 import app from './app';
 import { connectDatabase, env } from './config';
+import { startQuotaResetJob } from './jobs';
 
 const startServer = async () => {
   try {
-    // Connect to MongoDB
+    // Connect to database
     await connectDatabase();
     console.log(`Connected to ${env.DB_TYPE === 'mongodb' ? 'MongoDB' : 'PostgreSQL'}`);
+
+    // Start background jobs
+    startQuotaResetJob();
 
     // Start server
     app.listen(env.PORT, () => {

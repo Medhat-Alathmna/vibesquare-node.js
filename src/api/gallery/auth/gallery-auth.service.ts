@@ -24,6 +24,7 @@ import {
   galleryLoginHistoryRepository,
   gallerySubscriptionRepository
 } from '../../../shared/repositories/postgres/gallery.repository';
+import { galleryTokenUsageRepository } from '../../../shared/repositories/postgres/gallery-token.repository';
 import { galleryTokenService } from './gallery-token.service';
 import { emailService } from '../../auth/services/email.service';
 
@@ -74,6 +75,9 @@ export class GalleryAuthService {
       tier: 'free',
       status: 'active'
     });
+
+    // Initialize token quota
+    await galleryTokenUsageRepository.initializeForUser(user.id);
 
     // Generate email verification token
     const verificationToken = galleryTokenService.generateSecureToken();
@@ -470,6 +474,9 @@ export class GalleryAuthService {
         tier: 'free',
         status: 'active'
       });
+
+      // Initialize token quota
+      await galleryTokenUsageRepository.initializeForUser(user.id);
     }
 
     if (!user.isActive) {
@@ -580,7 +587,7 @@ export class GalleryAuthService {
    * Check if user can download
    */
   private checkCanDownload(user: IGalleryUser): boolean {
-    if (user.subscriptionTier === 'premium') {
+    if (user.subscriptionTier === 'pro') {
       return true;
     }
 

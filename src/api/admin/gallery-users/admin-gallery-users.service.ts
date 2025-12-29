@@ -4,7 +4,9 @@ import {
   IGalleryUser,
   SafeGalleryUser,
   PaginatedResult,
-  FREE_USER_DOWNLOAD_COOLDOWN_MS
+  FREE_USER_DOWNLOAD_COOLDOWN_MS,
+  QUOTA_LIMITS,
+  GallerySubscriptionTier
 } from '../../gallery/gallery.types';
 import {
   galleryUserRepository,
@@ -12,6 +14,10 @@ import {
   galleryNotificationRepository,
   gallerySubscriptionRepository
 } from '../../../shared/repositories/postgres/gallery.repository';
+import {
+  galleryTokenUsageRepository,
+  galleryTokenTransactionRepository
+} from '../../../shared/repositories/postgres/gallery-token.repository';
 import { userRepository, roleRepository } from '../../../shared/repositories/postgres/auth.repository';
 import { galleryTokenService } from '../../gallery/auth/gallery-token.service';
 
@@ -63,7 +69,7 @@ export class AdminGalleryUsersService {
       bio?: string;
       isActive?: boolean;
       emailVerified?: boolean;
-      subscriptionTier?: 'free' | 'premium';
+      subscriptionTier?: 'free' | 'pro';
     }
   ): Promise<SafeGalleryUser> {
     const user = await galleryUserRepository.findById(id);
@@ -283,7 +289,7 @@ export class AdminGalleryUsersService {
     title: string,
     message: string,
     filter?: {
-      subscriptionTier?: 'free' | 'premium';
+      subscriptionTier?: 'free' | 'pro';
       isActive?: boolean;
     }
   ): Promise<number> {
@@ -320,14 +326,14 @@ export class AdminGalleryUsersService {
   async getStatistics(): Promise<{
     totalUsers: number;
     freeUsers: number;
-    premiumUsers: number;
+    proUsers: number;
     activeUsers: number;
     usersWithPanelAccess: number;
   }> {
-    const [total, freeCount, premiumCount] = await Promise.all([
+    const [total, freeCount, proCount] = await Promise.all([
       galleryUserRepository.count(),
       galleryUserRepository.countBySubscriptionTier('free'),
-      galleryUserRepository.countBySubscriptionTier('premium')
+      galleryUserRepository.countBySubscriptionTier('pro')
     ]);
 
     // For active users and panel access, we need to query
@@ -338,9 +344,334 @@ export class AdminGalleryUsersService {
     return {
       totalUsers: total,
       freeUsers: freeCount,
-      premiumUsers: premiumCount,
+      proUsers: proCount,
       activeUsers,
       usersWithPanelAccess
+    };
+  }
+
+  // ==================== QUOTA MANAGEMENT ====================
+
+  /**
+   * Get user's current token quota status
+   */
+  async getUserQuota(userId: string): Promise<{
+    userId: string;
+    tier: GallerySubscriptionTier;
+    quota: {
+      limit: number;
+      used: number;
+      remaining: number;
+      usagePercentage: number;
+      periodStart: Date;
+      periodEnd: Date;
+    };
+    stats: {
+      totalTokensUsed: number;
+      analysisCount: number;
+      lastAnalysisAt: Date | null;
+    };
+  }> {
+    const user = await galleryUserRepository.findById(userId);
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Gallery user not found');
+    }
+
+    let usage = await galleryTokenUsageRepository.findByUserId(userId);
+
+    // If no usage record, create one
+    if (!usage) {
+      const now = new Date();
+      const periodEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      usage = await galleryTokenUsageRepository.create({
+        userId,
+        tokensUsed: 0,
+        quotaPeriodStart: now,
+        quotaPeriodEnd: periodEnd,
+        totalTokensUsed: 0,
+        analysisCount: 0,
+        totalAnalysisCount: 0
+      });
+    }
+
+    const limit = QUOTA_LIMITS[user.subscriptionTier];
+    const used = Number(usage.tokensUsed);
+    const remaining = Math.max(0, limit - used);
+    const usagePercentage = Math.min(100, (used / limit) * 100);
+
+    return {
+      userId,
+      tier: user.subscriptionTier,
+      quota: {
+        limit,
+        used,
+        remaining,
+        usagePercentage: Math.round(usagePercentage * 10) / 10,
+        periodStart: usage.quotaPeriodStart,
+        periodEnd: usage.quotaPeriodEnd
+      },
+      stats: {
+        totalTokensUsed: Number(usage.totalTokensUsed),
+        analysisCount: usage.analysisCount,
+        lastAnalysisAt: usage.lastAnalysisAt || null
+      }
+    };
+  }
+
+  /**
+   * Get user's token transaction history
+   */
+  async getUserQuotaHistory(userId: string, page: number = 1, limit: number = 50) {
+    const user = await galleryUserRepository.findById(userId);
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Gallery user not found');
+    }
+
+    return galleryTokenTransactionRepository.findByUserId(userId, page, limit);
+  }
+
+  /**
+   * Reset user's token quota
+   */
+  async resetUserQuota(userId: string, reason: string): Promise<{
+    message: string;
+    newQuota: {
+      limit: number;
+      used: number;
+      remaining: number;
+      periodEnd: Date;
+    };
+  }> {
+    const user = await galleryUserRepository.findById(userId);
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Gallery user not found');
+    }
+
+    let usage = await galleryTokenUsageRepository.findByUserId(userId);
+    const tokensBefore = usage ? Number(usage.tokensUsed) : 0;
+
+    const now = new Date();
+    const periodEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    if (usage) {
+      await galleryTokenUsageRepository.resetQuota(userId, now, periodEnd);
+    } else {
+      usage = await galleryTokenUsageRepository.create({
+        userId,
+        tokensUsed: 0,
+        quotaPeriodStart: now,
+        quotaPeriodEnd: periodEnd,
+        totalTokensUsed: 0,
+        analysisCount: 0,
+        totalAnalysisCount: 0
+      });
+    }
+
+    // Log transaction
+    await galleryTokenTransactionRepository.create({
+      userId,
+      type: 'reset',
+      tokensAmount: 0,
+      tokensBefore,
+      tokensAfter: 0,
+      description: `Admin reset: ${reason}`,
+      metadata: {}
+    });
+
+    const limit = QUOTA_LIMITS[user.subscriptionTier];
+
+    return {
+      message: 'Quota reset successfully',
+      newQuota: {
+        limit,
+        used: 0,
+        remaining: limit,
+        periodEnd
+      }
+    };
+  }
+
+  /**
+   * Add bonus tokens to user's quota
+   */
+  async addBonusTokens(userId: string, amount: number, reason: string): Promise<{
+    message: string;
+    newQuota: {
+      limit: number;
+      used: number;
+      remaining: number;
+      bonusAdded: number;
+    };
+  }> {
+    const user = await galleryUserRepository.findById(userId);
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Gallery user not found');
+    }
+
+    if (amount <= 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Amount must be positive');
+    }
+
+    let usage = await galleryTokenUsageRepository.findByUserId(userId);
+
+    if (!usage) {
+      const now = new Date();
+      const periodEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      usage = await galleryTokenUsageRepository.create({
+        userId,
+        tokensUsed: 0,
+        quotaPeriodStart: now,
+        quotaPeriodEnd: periodEnd,
+        totalTokensUsed: 0,
+        analysisCount: 0,
+        totalAnalysisCount: 0
+      });
+    }
+
+    const tokensBefore = Number(usage.tokensUsed);
+    // Reduce used tokens (effectively adding tokens)
+    const newUsed = Math.max(0, tokensBefore - amount);
+
+    await galleryTokenUsageRepository.update(usage.id, {
+      tokensUsed: newUsed
+    });
+
+    // Log transaction
+    await galleryTokenTransactionRepository.create({
+      userId,
+      type: 'bonus',
+      tokensAmount: amount,
+      tokensBefore,
+      tokensAfter: newUsed,
+      description: `Bonus tokens: ${reason}`,
+      metadata: {}
+    });
+
+    const limit = QUOTA_LIMITS[user.subscriptionTier];
+
+    return {
+      message: `${amount.toLocaleString()} tokens added successfully`,
+      newQuota: {
+        limit,
+        used: newUsed,
+        remaining: limit - newUsed,
+        bonusAdded: amount
+      }
+    };
+  }
+
+  /**
+   * Get quota statistics across all users
+   */
+  async getQuotaStatistics(): Promise<{
+    overview: {
+      totalTokensUsed: number;
+      totalAnalyses: number;
+      averageTokensPerAnalysis: number;
+    };
+    byTier: {
+      free: {
+        users: number;
+        totalTokensUsed: number;
+        averageUsagePercent: number;
+        quotaExceededCount: number;
+      };
+      pro: {
+        users: number;
+        totalTokensUsed: number;
+        averageUsagePercent: number;
+        quotaExceededCount: number;
+      };
+    };
+    topUsers: Array<{
+      userId: string;
+      username: string;
+      tier: GallerySubscriptionTier;
+      tokensUsed: number;
+      analysisCount: number;
+    }>;
+  }> {
+    // Get all users and their usage
+    const usersResult = await galleryUserRepository.findAll(1, 10000);
+    const users = usersResult.data;
+
+    const allUsage = await galleryTokenUsageRepository.findAll();
+
+    // Create usage map
+    const usageMap = new Map(allUsage.map(u => [u.userId, u]));
+
+    let totalTokensUsed = 0;
+    let totalAnalyses = 0;
+
+    const tierStats = {
+      free: { users: 0, totalTokensUsed: 0, usageSum: 0, exceededCount: 0 },
+      pro: { users: 0, totalTokensUsed: 0, usageSum: 0, exceededCount: 0 }
+    };
+
+    const userUsageList: Array<{
+      userId: string;
+      username: string;
+      tier: GallerySubscriptionTier;
+      tokensUsed: number;
+      analysisCount: number;
+    }> = [];
+
+    for (const user of users) {
+      const usage = usageMap.get(user.id);
+      const tokensUsed = usage ? Number(usage.tokensUsed) : 0;
+      const analysisCount = usage?.analysisCount || 0;
+      const limit = QUOTA_LIMITS[user.subscriptionTier];
+
+      totalTokensUsed += usage ? Number(usage.totalTokensUsed) : 0;
+      totalAnalyses += analysisCount;
+
+      const tier = user.subscriptionTier;
+      tierStats[tier].users++;
+      tierStats[tier].totalTokensUsed += tokensUsed;
+      tierStats[tier].usageSum += (tokensUsed / limit) * 100;
+      if (tokensUsed >= limit) {
+        tierStats[tier].exceededCount++;
+      }
+
+      userUsageList.push({
+        userId: user.id,
+        username: user.username,
+        tier: user.subscriptionTier,
+        tokensUsed,
+        analysisCount
+      });
+    }
+
+    // Sort by tokens used and get top 10
+    const topUsers = userUsageList
+      .sort((a, b) => b.tokensUsed - a.tokensUsed)
+      .slice(0, 10);
+
+    return {
+      overview: {
+        totalTokensUsed,
+        totalAnalyses,
+        averageTokensPerAnalysis: totalAnalyses > 0 ? Math.round(totalTokensUsed / totalAnalyses) : 0
+      },
+      byTier: {
+        free: {
+          users: tierStats.free.users,
+          totalTokensUsed: tierStats.free.totalTokensUsed,
+          averageUsagePercent: tierStats.free.users > 0
+            ? Math.round(tierStats.free.usageSum / tierStats.free.users * 10) / 10
+            : 0,
+          quotaExceededCount: tierStats.free.exceededCount
+        },
+        pro: {
+          users: tierStats.pro.users,
+          totalTokensUsed: tierStats.pro.totalTokensUsed,
+          averageUsagePercent: tierStats.pro.users > 0
+            ? Math.round(tierStats.pro.usageSum / tierStats.pro.users * 10) / 10
+            : 0,
+          quotaExceededCount: tierStats.pro.exceededCount
+        }
+      },
+      topUsers
     };
   }
 
@@ -369,7 +700,7 @@ export class AdminGalleryUsersService {
   }
 
   private checkCanDownload(user: IGalleryUser): boolean {
-    if (user.subscriptionTier === 'premium') return true;
+    if (user.subscriptionTier === 'pro') return true;
     if (!user.lastDownloadAt) return true;
     const cooldownEnd = user.lastDownloadAt.getTime() + FREE_USER_DOWNLOAD_COOLDOWN_MS;
     return Date.now() >= cooldownEnd;

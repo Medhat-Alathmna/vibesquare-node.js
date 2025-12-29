@@ -115,10 +115,10 @@ export const requireGalleryPremium = () => {
       return next(new ApiError(httpStatus.UNAUTHORIZED, 'Authentication required'));
     }
 
-    if (req.galleryUser.subscriptionTier !== 'premium') {
+    if (req.galleryUser.subscriptionTier !== 'pro') {
       return next(new ApiError(
         httpStatus.FORBIDDEN,
-        'This feature requires a premium subscription'
+        'This feature requires a Pro subscription'
       ));
     }
 
@@ -159,7 +159,7 @@ export const checkDownloadEligibility = () => {
     }
 
     // Premium users can always download
-    if (req.galleryUser.subscriptionTier === 'premium') {
+    if (req.galleryUser.subscriptionTier === 'pro') {
       (req as any).canDownload = true;
       (req as any).downloadBlockReason = null;
       return next();
@@ -207,7 +207,7 @@ export const requireDownloadEligibility = () => {
     }
 
     // Premium users can always download
-    if (req.galleryUser.subscriptionTier === 'premium') {
+    if (req.galleryUser.subscriptionTier === 'pro') {
       return next();
     }
 
@@ -267,7 +267,7 @@ export const requireAIEligibility = () => {
       return next(new ApiError(httpStatus.FORBIDDEN, 'Email verification required to use AI features'));
     }
 
-    if (req.galleryUser.subscriptionTier !== 'premium') {
+    if (req.galleryUser.subscriptionTier !== 'pro') {
       return next(new ApiError(
         httpStatus.FORBIDDEN,
         'AI features require a Premium subscription. Upgrade now to unlock AI-powered features.'

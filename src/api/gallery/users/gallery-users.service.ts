@@ -129,8 +129,8 @@ export class GalleryUsersService {
       };
     }
 
-    // Premium users can always download
-    if (user.subscriptionTier === 'premium') {
+    // Pro users can always download
+    if (user.subscriptionTier === 'pro') {
       return {
         canDownload: true,
         reason: 'ok'

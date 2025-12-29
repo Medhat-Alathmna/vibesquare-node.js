@@ -1,6 +1,7 @@
+import { v4 as uuidv4 } from 'uuid';
 import { pgPool } from '../../../config/database';
 import { IProjectRepository, ProjectData, ProjectsResult } from '../interfaces';
-import { ProjectQueryOptions, SearchOptions, SortOption } from '../../types';
+import { ProjectQueryOptions, SearchOptions, SortOption, CreateProjectDTO, UpdateProjectDTO } from '../../types';
 
 export class PostgresProjectRepository implements IProjectRepository {
   private mapRowToProject(row: any): ProjectData {
@@ -24,7 +25,9 @@ export class PostgresProjectRepository implements IProjectRepository {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       collectionIds: row.collection_ids || [],
-      codeFiles: row.code_files || []
+      codeFiles: row.code_files || [],
+      builder: row.builder,
+      builderSocialLinks: row.builder_social_links
     };
   }
 
@@ -175,5 +178,134 @@ export class PostgresProjectRepository implements IProjectRepository {
     }
 
     return this.mapRowToProject(result.rows[0]);
+  }
+
+  async create(data: CreateProjectDTO): Promise<ProjectData> {
+    const id = uuidv4();
+    const result = await pgPool.query(
+      `INSERT INTO projects (
+        id, title, description, short_description, thumbnail, screenshots,
+        demo_url, download_url, prompt, framework, tags, styles, category,
+        code_files, builder, builder_social_links, likes, views, downloads,
+        collection_ids, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        0, 0, 0, '{}', NOW(), NOW()
+      ) RETURNING *`,
+      [
+        id,
+        data.title,
+        data.description,
+        data.shortDescription,
+        data.thumbnail,
+        JSON.stringify(data.screenshots || []),
+        data.demoUrl || null,
+        data.downloadUrl || null,
+        JSON.stringify(data.prompt),
+        data.framework,
+        JSON.stringify(data.tags || []),
+        JSON.stringify(data.styles || []),
+        data.category,
+        JSON.stringify(data.codeFiles || []),
+        data.builder ? JSON.stringify(data.builder) : null,
+        data.builderSocialLinks ? JSON.stringify(data.builderSocialLinks) : null
+      ]
+    );
+
+    return this.mapRowToProject(result.rows[0]);
+  }
+
+  async update(id: string, data: UpdateProjectDTO): Promise<ProjectData | null> {
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (data.title !== undefined) {
+      updates.push(`title = $${paramIndex++}`);
+      values.push(data.title);
+    }
+    if (data.description !== undefined) {
+      updates.push(`description = $${paramIndex++}`);
+      values.push(data.description);
+    }
+    if (data.shortDescription !== undefined) {
+      updates.push(`short_description = $${paramIndex++}`);
+      values.push(data.shortDescription);
+    }
+    if (data.thumbnail !== undefined) {
+      updates.push(`thumbnail = $${paramIndex++}`);
+      values.push(data.thumbnail);
+    }
+    if (data.screenshots !== undefined) {
+      updates.push(`screenshots = $${paramIndex++}`);
+      values.push(JSON.stringify(data.screenshots));
+    }
+    if (data.demoUrl !== undefined) {
+      updates.push(`demo_url = $${paramIndex++}`);
+      values.push(data.demoUrl);
+    }
+    if (data.downloadUrl !== undefined) {
+      updates.push(`download_url = $${paramIndex++}`);
+      values.push(data.downloadUrl);
+    }
+    if (data.prompt !== undefined) {
+      updates.push(`prompt = $${paramIndex++}`);
+      values.push(JSON.stringify(data.prompt));
+    }
+    if (data.framework !== undefined) {
+      updates.push(`framework = $${paramIndex++}`);
+      values.push(data.framework);
+    }
+    if (data.tags !== undefined) {
+      updates.push(`tags = $${paramIndex++}`);
+      values.push(JSON.stringify(data.tags));
+    }
+    if (data.styles !== undefined) {
+      updates.push(`styles = $${paramIndex++}`);
+      values.push(JSON.stringify(data.styles));
+    }
+    if (data.category !== undefined) {
+      updates.push(`category = $${paramIndex++}`);
+      values.push(data.category);
+    }
+    if (data.codeFiles !== undefined) {
+      updates.push(`code_files = $${paramIndex++}`);
+      values.push(JSON.stringify(data.codeFiles));
+    }
+    if (data.builder !== undefined) {
+      updates.push(`builder = $${paramIndex++}`);
+      values.push(JSON.stringify(data.builder));
+    }
+    if (data.builderSocialLinks !== undefined) {
+      updates.push(`builder_social_links = $${paramIndex++}`);
+      values.push(JSON.stringify(data.builderSocialLinks));
+    }
+
+    if (updates.length === 0) {
+      return this.findById(id);
+    }
+
+    updates.push('updated_at = NOW()');
+    values.push(id);
+
+    const result = await pgPool.query(
+      `UPDATE projects SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      values
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToProject(result.rows[0]);
+  }
+
+  async delete(id: string): Promise<boolean> {
+    const result = await pgPool.query(
+      `DELETE FROM projects WHERE id = $1`,
+      [id]
+    );
+
+    return result.rowCount !== null && result.rowCount > 0;
   }
 }
