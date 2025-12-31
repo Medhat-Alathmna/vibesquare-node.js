@@ -1,6 +1,6 @@
 import httpStatus from 'http-status';
 import { ApiError } from '../../../shared/utils/ApiError';
-import { getProjectRepository, ProjectData, ProjectsResult } from '../../../shared/repositories';
+import { getProjectRepository, ProjectData, ProjectListResult } from '../../../shared/repositories';
 import { CreateProjectDTO, UpdateProjectDTO, Framework, Category } from '../../../shared/types';
 
 interface ListProjectsOptions {
@@ -16,7 +16,7 @@ export class AdminProjectsService {
     return getProjectRepository();
   }
 
-  async listProjects(options: ListProjectsOptions): Promise<ProjectsResult> {
+  async listProjects(options: ListProjectsOptions): Promise<ProjectListResult> {
     const { page, limit, search, framework, category } = options;
 
     if (search) {

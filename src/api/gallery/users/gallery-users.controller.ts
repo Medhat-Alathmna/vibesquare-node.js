@@ -65,13 +65,13 @@ export const galleryUsersController = {
   }),
 
   /**
-   * Get public profile by username
+   * Get enhanced public profile by username (with stats)
    * GET /api/gallery/users/profile/:username
    */
   getPublicProfile: asyncHandler(async (req: Request, res: Response) => {
     const { username } = req.params;
 
-    const profile = await galleryUsersService.getPublicProfile(username);
+    const profile = await galleryUsersService.getEnhancedPublicProfile(username);
 
     if (!profile) {
       return res.status(httpStatus.NOT_FOUND).json(
@@ -80,6 +80,86 @@ export const galleryUsersController = {
     }
 
     res.json(ApiResponse.success(profile));
+  }),
+
+  /**
+   * Get detailed stats for own profile
+   * GET /api/gallery/users/me/stats
+   */
+  getMyStats: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.galleryUser) {
+      return res.status(httpStatus.UNAUTHORIZED).json(
+        ApiResponse.error('Authentication required', httpStatus.UNAUTHORIZED)
+      );
+    }
+
+    const stats = await galleryUsersService.getOwnProfileStats(req.galleryUser.id);
+
+    res.json(ApiResponse.success(stats));
+  }),
+
+  /**
+   * Get user's public favorites with project details
+   * GET /api/gallery/users/:username/favorites
+   */
+  getUserFavorites: asyncHandler(async (req: Request, res: Response) => {
+    const { username } = req.params;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    const favorites = await galleryUsersService.getUserFavoritesWithProjects(
+      username,
+      page,
+      Math.min(limit, 50) // Cap at 50
+    );
+
+    res.json(ApiResponse.success(favorites));
+  }),
+
+  /**
+   * Get own analysis history
+   * GET /api/gallery/users/me/analyses
+   */
+  getMyAnalyses: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.galleryUser) {
+      return res.status(httpStatus.UNAUTHORIZED).json(
+        ApiResponse.error('Authentication required', httpStatus.UNAUTHORIZED)
+      );
+    }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    const analyses = await galleryUsersService.getOwnAnalysisHistory(
+      req.galleryUser.id,
+      page,
+      Math.min(limit, 100) // Cap at 100
+    );
+
+    res.json(ApiResponse.success(analyses));
+  }),
+
+  /**
+   * Get own activity log
+   * GET /api/gallery/users/me/activity
+   */
+  getMyActivity: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.galleryUser) {
+      return res.status(httpStatus.UNAUTHORIZED).json(
+        ApiResponse.error('Authentication required', httpStatus.UNAUTHORIZED)
+      );
+    }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+
+    const activity = await galleryUsersService.getOwnActivityLog(
+      req.galleryUser.id,
+      page,
+      Math.min(limit, 100) // Cap at 100
+    );
+
+    res.json(ApiResponse.success(activity));
   }),
 
   /**

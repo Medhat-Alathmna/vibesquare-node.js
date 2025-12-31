@@ -21,13 +21,6 @@ const promptSchema = Joi.object({
   parameters: Joi.object().optional()
 });
 
-const codeFileSchema = Joi.object({
-  filename: Joi.string().min(1).required(),
-  language: Joi.string().min(1).required(),
-  content: Joi.string().required(),
-  path: Joi.string().optional()
-});
-
 export const adminProjectsValidator = {
   list: {
     query: Joi.object({
@@ -54,12 +47,12 @@ export const adminProjectsValidator = {
       screenshots: Joi.array().items(Joi.string().uri()).optional(),
       demoUrl: Joi.string().uri().allow('', null).optional(),
       downloadUrl: Joi.string().uri().allow('', null).optional(),
+      sourceCodeFile: Joi.string().uri().allow('', null).optional(),
       prompt: promptSchema.required(),
       framework: Joi.string().valid(...FRAMEWORKS).required(),
       tags: Joi.array().items(Joi.string()).optional(),
       styles: Joi.array().items(Joi.string()).optional(),
       category: Joi.string().valid(...CATEGORIES).required(),
-      codeFiles: Joi.array().items(codeFileSchema).optional(),
       builder: builderSchema.optional(),
       builderSocialLinks: builderSocialLinksSchema.optional()
     })
@@ -77,12 +70,12 @@ export const adminProjectsValidator = {
       screenshots: Joi.array().items(Joi.string().uri()).optional(),
       demoUrl: Joi.string().uri().allow('', null).optional(),
       downloadUrl: Joi.string().uri().allow('', null).optional(),
+      sourceCodeFile: Joi.string().uri().allow('', null).optional(),
       prompt: promptSchema.optional(),
       framework: Joi.string().valid(...FRAMEWORKS).optional(),
       tags: Joi.array().items(Joi.string()).optional(),
       styles: Joi.array().items(Joi.string()).optional(),
       category: Joi.string().valid(...CATEGORIES).optional(),
-      codeFiles: Joi.array().items(codeFileSchema).optional(),
       builder: builderSchema.optional(),
       builderSocialLinks: builderSocialLinksSchema.optional()
     })

@@ -1,4 +1,4 @@
-import { getProjectRepository, ProjectData, ProjectsResult } from '../../shared/repositories';
+import { getProjectRepository, ProjectData, ProjectListResult } from '../../shared/repositories';
 import { ApiError } from '../../shared/utils/ApiError';
 import { ProjectQueryOptions, SearchOptions } from '../../shared/types';
 import httpStatus from 'http-status';
@@ -8,11 +8,11 @@ export class ProjectService {
     return getProjectRepository();
   }
 
-  async getProjects(options: ProjectQueryOptions): Promise<ProjectsResult> {
+  async getProjects(options: ProjectQueryOptions): Promise<ProjectListResult> {
     return this.repository.findAll(options);
   }
 
-  async searchProjects(options: SearchOptions): Promise<ProjectsResult> {
+  async searchProjects(options: SearchOptions): Promise<ProjectListResult> {
     return this.repository.search(options);
   }
 

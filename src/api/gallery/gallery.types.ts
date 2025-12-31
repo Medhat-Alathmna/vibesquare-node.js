@@ -486,3 +486,68 @@ export interface AnalysisHistoryItem {
   createdAt: Date;
   completedAt?: Date;
 }
+
+// ============================================
+// Enhanced Public Profile (visible to everyone)
+// ============================================
+export interface EnhancedPublicProfile {
+  username: string;
+  avatarUrl?: string;
+  bio?: string;
+  socialLinks: ISocialLinks;
+  subscriptionTier: GallerySubscriptionTier;
+  memberSince: Date;
+  stats: {
+    totalFavorites: number;
+    totalAnalyses: number;
+  };
+}
+
+// ============================================
+// Own Profile Stats (detailed, private)
+// ============================================
+export interface OwnProfileStats {
+  totalFavorites: number;
+  totalAnalyses: number;
+  totalTokensUsed: number;
+  tokensUsedThisWeek: number;
+  analysisThisWeek: number;
+  quotaLimit: number;
+  quotaRemaining: number;
+  quotaPeriodEnd: Date;
+  lastActiveAt?: Date;
+  lastAnalysisAt?: Date;
+  memberSince: Date;
+}
+
+// ============================================
+// Favorite with Project Details
+// ============================================
+export interface FavoriteWithProject {
+  id: string;
+  projectId: string;
+  favoritedAt: Date;
+  project: {
+    id: string;
+    title: string;
+    shortDescription: string;
+    thumbnail: string;
+    framework: string;
+    category: string;
+    tags: string[];
+    likes: number;
+    views: number;
+  } | null;
+}
+
+// ============================================
+// Activity Log Item (for API response)
+// ============================================
+export interface ActivityLogItem {
+  id: string;
+  action: ActivityAction;
+  resourceType?: string;
+  resourceId?: string;
+  description: string;
+  createdAt: Date;
+}

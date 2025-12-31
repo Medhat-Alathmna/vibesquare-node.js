@@ -82,12 +82,12 @@ export interface CreateProjectDTO {
   screenshots?: string[];
   demoUrl?: string;
   downloadUrl?: string;
+  sourceCodeFile?: string;
   prompt: Prompt;
   framework: Framework;
   tags?: string[];
   styles?: string[];
   category: Category;
-  codeFiles?: CodeFile[];
   builder?: Builder;
   builderSocialLinks?: BuilderSocialLinks;
 }
@@ -101,12 +101,12 @@ export interface UpdateProjectDTO {
   screenshots?: string[];
   demoUrl?: string;
   downloadUrl?: string;
+  sourceCodeFile?: string;
   prompt?: Prompt;
   framework?: Framework;
   tags?: string[];
   styles?: string[];
   category?: Category;
-  codeFiles?: CodeFile[];
   builder?: Builder;
   builderSocialLinks?: BuilderSocialLinks;
 }

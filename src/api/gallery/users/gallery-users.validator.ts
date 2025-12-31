@@ -31,6 +31,23 @@ export const galleryUsersValidator = {
     })
   },
 
+  getUserFavorites: {
+    params: Joi.object({
+      username: Joi.string().required()
+    }),
+    query: Joi.object({
+      page: Joi.number().integer().min(1).default(1),
+      limit: Joi.number().integer().min(1).max(50).default(20)
+    })
+  },
+
+  pagination: {
+    query: Joi.object({
+      page: Joi.number().integer().min(1).default(1),
+      limit: Joi.number().integer().min(1).max(100).default(20)
+    })
+  },
+
   recordDownload: {
     params: Joi.object({
       projectId: Joi.string().required()

@@ -1,13 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { FRAMEWORKS, CATEGORIES, Framework, Category, Prompt, CodeFile, Builder, BuilderSocialLinks } from '../../shared/types';
-
-// CodeFile subdocument schema
-const CodeFileSchema = new Schema({
-  filename: { type: String, required: true },
-  language: { type: String, required: true },
-  content: { type: String, required: true },
-  path: { type: String }
-}, { _id: false });
+import { FRAMEWORKS, CATEGORIES, Framework, Category, Prompt, Builder, BuilderSocialLinks } from '../../shared/types';
 
 // Prompt subdocument schema
 const PromptSchema = new Schema({
@@ -41,6 +33,7 @@ export interface IProject extends Document {
   screenshots: string[];
   demoUrl?: string;
   downloadUrl?: string;
+  sourceCodeFile?: string;
   prompt: Prompt;
   framework: Framework;
   tags: string[];
@@ -52,7 +45,6 @@ export interface IProject extends Document {
   createdAt: Date;
   updatedAt: Date;
   collectionIds: string[];
-  codeFiles: CodeFile[];
   builder?: Builder;
   builderSocialLinks?: BuilderSocialLinks;
 }
@@ -75,7 +67,7 @@ const ProjectSchema = new Schema<IProject>({
   views: { type: Number, default: 0 },
   downloads: { type: Number, default: 0 },
   collectionIds: [{ type: String }],
-  codeFiles: [CodeFileSchema],
+  sourceCodeFile: { type: String },
   builder: { type: BuilderSchema },
   builderSocialLinks: { type: BuilderSocialLinksSchema }
 }, {

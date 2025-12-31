@@ -793,6 +793,14 @@ export class GalleryActivityLogRepository {
     return result.rowCount || 0;
   }
 
+  async getLastActivityDate(userId: string): Promise<Date | null> {
+    const result = await pgPool.query(
+      'SELECT created_at FROM gallery_activity_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+    return result.rows[0] ? new Date(result.rows[0].created_at) : null;
+  }
+
   private mapRow(row: any): IGalleryActivityLog {
     return {
       id: row.id,

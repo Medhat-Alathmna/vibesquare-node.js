@@ -7,6 +7,7 @@ import {
   StructuralAnalysis,
   DesignPromptResult,
 } from './ir.types';
+import { ReducedParsedDOM } from './token-budget';
 import { ApiError } from '../../../shared/utils/ApiError';
 import httpStatus from 'http-status';
 
@@ -107,14 +108,18 @@ Example format:
 "⚠ User clarification required:
 Ask the user whether the header should be fixed, floating, or static."
 
-────────────────────────
-IMAGES & MOCK DATA RULES
-────────────────────────
-- If an image URL is missing, local, invalid, or ambiguous:
-  - Infer the CONTEXT (dashboard, illustration, avatar, product)
-  - Instruct the AI Code Generator to use a realistic mock image
-  - NEVER invent brand-specific visuals
+━━━━━━━━━━━━━━━━━━━━━━
+IMAGE HANDLING RULES
+━━━━━━━━━━━━━━━━━━━━━━
 
+- If an image src is relative (e.g. /assets/img/x.png):
+  You MUST rewrite it conceptually as:
+  src = {siteUrl}/assets/img/x.png
+
+- If an image is missing, broken, or non-http:
+  - Infer image intent from context (hero, dashboard, product, avatar)
+  - Instruct AI CODE GENERATOR to use MOCK / PLACEHOLDER images
+    that match the context and style.
 ────────────────────────
 ANIMATIONS
 ────────────────────────
@@ -181,7 +186,7 @@ async function interpretWithOpenAI(
         { role: 'user', content: `Analyze this design and generate a production-ready prompt for the AI Code Generator:\n\n${summary}` }
       ],
       max_tokens: MAX_OUTPUT_TOKENS,
-      temperature: 0.3,
+      temperature: 0.6,
     });
 
     const text = response.choices[0]?.message?.content || '';
@@ -285,7 +290,7 @@ function formatPromptResponse(prompt: string): string {
 
 /**
  * Build a hierarchical summary of the DOM tree for LLM interpretation
- * Uses TOON format + CSS Deduplication for minimal token usage
+ * Uses CSS Deduplication and depth limiting for minimal token usage
  */
 function buildStructuredSummary(parsed: RawParsedDOM, structural: StructuralAnalysis): string {
   // 1. Deduplicate CSS
@@ -312,7 +317,7 @@ function buildStructuredSummary(parsed: RawParsedDOM, structural: StructuralAnal
     nav: parsed.navigation.map(n => n.text),
   };
 
-  // 3. Serialize with JSON (TOON removed)
+  // 3. Serialize with JSON
   return JSON.stringify(context, null, 2);
 }
 

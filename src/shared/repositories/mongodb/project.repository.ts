@@ -1,7 +1,24 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Project } from '../../../api/project/project.model';
-import { IProjectRepository, ProjectData, ProjectsResult } from '../interfaces';
+import { IProjectRepository, ProjectData, ProjectListResult, ProjectSummary } from '../interfaces';
 import { ProjectQueryOptions, SearchOptions, SortOption, CreateProjectDTO, UpdateProjectDTO } from '../../types';
+
+// Fields to select for list view (summary)
+const SUMMARY_FIELDS = {
+  id: 1,
+  title: 1,
+  shortDescription: 1,
+  thumbnail: 1,
+  framework: 1,
+  category: 1,
+  tags: 1,
+  likes: 1,
+  views: 1,
+  downloads: 1,
+  createdAt: 1,
+  'builder.name': 1,
+  'builder.avatarUrl': 1
+};
 
 export class MongoProjectRepository implements IProjectRepository {
   private getSortOption(sortBy: SortOption): Record<string, 1 | -1> {
@@ -14,7 +31,27 @@ export class MongoProjectRepository implements IProjectRepository {
     }
   }
 
-  async findAll(options: ProjectQueryOptions): Promise<ProjectsResult> {
+  private mapToSummary(doc: any): ProjectSummary {
+    return {
+      id: doc.id,
+      title: doc.title,
+      shortDescription: doc.shortDescription,
+      thumbnail: doc.thumbnail,
+      framework: doc.framework,
+      category: doc.category,
+      tags: doc.tags || [],
+      likes: doc.likes || 0,
+      views: doc.views || 0,
+      downloads: doc.downloads || 0,
+      createdAt: doc.createdAt,
+      builder: doc.builder ? {
+        name: doc.builder.name,
+        avatarUrl: doc.builder.avatarUrl
+      } : undefined
+    };
+  }
+
+  async findAll(options: ProjectQueryOptions): Promise<ProjectListResult> {
     const { page = 1, limit = 12, framework, category, tags, sortBy = 'recent' } = options;
     const skip = (page - 1) * limit;
 
@@ -27,7 +64,7 @@ export class MongoProjectRepository implements IProjectRepository {
 
     const [projects, total] = await Promise.all([
       Project.find(filter)
-        .select('-codeFiles')
+        .select(SUMMARY_FIELDS)
         .sort(sort)
         .skip(skip)
         .limit(limit)
@@ -36,7 +73,7 @@ export class MongoProjectRepository implements IProjectRepository {
     ]);
 
     return {
-      projects: projects as unknown as ProjectData[],
+      projects: projects.map(p => this.mapToSummary(p)),
       pagination: {
         page,
         limit,
@@ -47,14 +84,17 @@ export class MongoProjectRepository implements IProjectRepository {
     };
   }
 
-  async search(options: SearchOptions): Promise<ProjectsResult> {
+  async search(options: SearchOptions): Promise<ProjectListResult> {
     const { query, frameworks, categories, tags, sortBy = 'recent', page = 1, limit = 12 } = options;
     const skip = (page - 1) * limit;
 
     const filter: Record<string, any> = {};
 
     if (query) {
-      filter.$text = { $search: query };
+      filter.$or = [
+        { title: { $regex: query, $options: 'i' } },
+        { shortDescription: { $regex: query, $options: 'i' } }
+      ];
     }
     if (frameworks && frameworks.length > 0) {
       filter.framework = { $in: frameworks };
@@ -70,7 +110,7 @@ export class MongoProjectRepository implements IProjectRepository {
 
     const [projects, total] = await Promise.all([
       Project.find(filter)
-        .select('-codeFiles')
+        .select(SUMMARY_FIELDS)
         .sort(sort)
         .skip(skip)
         .limit(limit)
@@ -79,7 +119,7 @@ export class MongoProjectRepository implements IProjectRepository {
     ]);
 
     return {
-      projects: projects as unknown as ProjectData[],
+      projects: projects.map(p => this.mapToSummary(p)),
       pagination: {
         page,
         limit,
@@ -93,6 +133,16 @@ export class MongoProjectRepository implements IProjectRepository {
   async findById(id: string): Promise<ProjectData | null> {
     const project = await Project.findOne({ id }).lean();
     return project as unknown as ProjectData | null;
+  }
+
+  async findByIds(ids: string[]): Promise<ProjectSummary[]> {
+    if (ids.length === 0) return [];
+
+    const projects = await Project.find({ id: { $in: ids } })
+      .select(SUMMARY_FIELDS)
+      .lean();
+
+    return projects.map(p => this.mapToSummary(p));
   }
 
   async incrementStat(id: string, field: 'views' | 'likes' | 'downloads'): Promise<ProjectData | null> {
@@ -111,7 +161,6 @@ export class MongoProjectRepository implements IProjectRepository {
       screenshots: data.screenshots || [],
       tags: data.tags || [],
       styles: data.styles || [],
-      codeFiles: data.codeFiles || [],
       collectionIds: [],
       likes: 0,
       views: 0,

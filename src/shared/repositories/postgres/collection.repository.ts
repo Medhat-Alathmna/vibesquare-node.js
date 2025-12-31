@@ -25,6 +25,7 @@ export class PostgresCollectionRepository implements ICollectionRepository {
       screenshots: row.screenshots || [],
       demoUrl: row.demo_url,
       downloadUrl: row.download_url,
+      sourceCodeFile: row.source_code_file,
       prompt: row.prompt || {},
       framework: row.framework,
       tags: row.tags || [],
@@ -35,8 +36,7 @@ export class PostgresCollectionRepository implements ICollectionRepository {
       downloads: row.downloads || 0,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      collectionIds: row.collection_ids || [],
-      codeFiles: row.code_files || []
+      collectionIds: row.collection_ids || []
     };
   }
 
@@ -93,7 +93,7 @@ export class PostgresCollectionRepository implements ICollectionRepository {
 
     const result = await pgPool.query(
       `SELECT id, title, description, short_description, thumbnail, screenshots,
-              demo_url, download_url, prompt, framework, tags, styles, category,
+              demo_url, download_url, source_code_file, prompt, framework, tags, styles, category,
               likes, views, downloads, collection_ids, created_at, updated_at
        FROM projects WHERE id = ANY($1)`,
       [projectIds]

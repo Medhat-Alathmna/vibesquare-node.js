@@ -1,6 +1,25 @@
 import { ProjectQueryOptions, SearchOptions, PaginationResult, SortOption, CreateProjectDTO, UpdateProjectDTO, Builder, BuilderSocialLinks } from '../types';
 
-// Project types
+// Project Summary for list view (lightweight)
+export interface ProjectSummary {
+  id: string;
+  title: string;
+  shortDescription: string;
+  thumbnail: string;
+  framework: string;
+  category: string;
+  tags: string[];
+  likes: number;
+  views: number;
+  downloads: number;
+  createdAt: Date;
+  builder?: {
+    name: string;
+    avatarUrl?: string;
+  };
+}
+
+// Full Project data for detail view
 export interface ProjectData {
   id: string;
   title: string;
@@ -10,6 +29,7 @@ export interface ProjectData {
   screenshots: string[];
   demoUrl?: string;
   downloadUrl?: string;
+  sourceCodeFile?: string;
   prompt: {
     text: string;
     model: string;
@@ -26,18 +46,17 @@ export interface ProjectData {
   createdAt: Date;
   updatedAt: Date;
   collectionIds: string[];
-  codeFiles: Array<{
-    filename: string;
-    language: string;
-    content: string;
-    path?: string;
-  }>;
   builder?: Builder;
   builderSocialLinks?: BuilderSocialLinks;
 }
 
 export interface ProjectsResult {
   projects: ProjectData[];
+  pagination: PaginationResult;
+}
+
+export interface ProjectListResult {
+  projects: ProjectSummary[];
   pagination: PaginationResult;
 }
 
@@ -60,9 +79,10 @@ export interface CollectionsResult {
 
 // Repository interfaces
 export interface IProjectRepository {
-  findAll(options: ProjectQueryOptions): Promise<ProjectsResult>;
-  search(options: SearchOptions): Promise<ProjectsResult>;
+  findAll(options: ProjectQueryOptions): Promise<ProjectListResult>;
+  search(options: SearchOptions): Promise<ProjectListResult>;
   findById(id: string): Promise<ProjectData | null>;
+  findByIds(ids: string[]): Promise<ProjectSummary[]>;
   incrementStat(id: string, field: 'views' | 'likes' | 'downloads'): Promise<ProjectData | null>;
   create(data: CreateProjectDTO): Promise<ProjectData>;
   update(id: string, data: UpdateProjectDTO): Promise<ProjectData | null>;

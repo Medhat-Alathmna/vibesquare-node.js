@@ -15,8 +15,6 @@
 import { fetcher } from './fetcher';
 import { normalizer, NormalizationResult } from './normalizer';
 import { parser } from './parser';
-import { enhancedParser } from './enhanced-parser';
-import { visualParser } from './visual-parser';
 import { analyzer } from './analyzer';
 import { interpreter, LLMModel } from './interpreter';
 import {
@@ -76,46 +74,6 @@ export async function executePipeline(options: PipelineOptions): Promise<Pipelin
   // Step 2: Normalize HTML
   const normalizedResult = await normalizer.clean(fetchResult.html, fetchResult.finalUrl);
 
-
-  // V2 Visual Parser - Complete Redesign
-  if (useVisualParser) {
-    const visualParsedDOM = visualParser.parse(normalizedResult, fetchResult.finalUrl);
-    const processingTimeMs = Date.now() - startTime;
-
-    return {
-      prompt: '', // Visual parser outputs JSON directly for LLM
-      metadata: {
-        sourceUrl: fetchResult.finalUrl,
-        nodesFound: visualParsedDOM.visualTree.length,
-        layoutType: 'mixed',
-        difficulty: 'medium',
-        language: visualParsedDOM.meta.language,
-        processingTimeMs,
-      },
-      processingTimeMs,
-    };
-  }
-
-  // Enhanced Parser (V1)
-  if (useEnhancedParser) {
-    // Enhanced Parser Path - outputs JSON directly for LLM consumption
-    const enhancedParsedDOM = enhancedParser.parse(normalizedResult, fetchResult.finalUrl);
-    const processingTimeMs = Date.now() - startTime;
-
-    return {
-      prompt: '', // No prompt synthesis for enhanced parser
-      metadata: {
-        sourceUrl: fetchResult.finalUrl,
-        nodesFound: enhancedParsedDOM.totalNodes,
-        layoutType: 'mixed', // Enhanced parser doesn't compute layout type
-        difficulty: 'medium', // Enhanced parser doesn't compute difficulty
-        language: enhancedParsedDOM.language,
-        processingTimeMs,
-      },
-      processingTimeMs,
-    };
-  }
-
   // Standard Parser Path
   const parsedDOM = parser.parse(normalizedResult, fetchResult.finalUrl);
 
@@ -157,8 +115,6 @@ export async function executePipeline(options: PipelineOptions): Promise<Pipelin
 export { fetcher } from './fetcher';
 export { normalizer } from './normalizer';
 export { parser } from './parser';
-export { enhancedParser } from './enhanced-parser';
-export { visualParser } from './visual-parser';
 export { analyzer } from './analyzer';
 export { interpreter } from './interpreter';
 
