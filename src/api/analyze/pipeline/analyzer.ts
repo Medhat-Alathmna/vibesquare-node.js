@@ -31,7 +31,7 @@ export function analyzeStructure(parsed: RawParsedDOM): StructuralAnalysis {
   const rootNodeCount = parsed.rootNodes.length;
   const maxDepth = calculateMaxDepth(parsed.rootNodes);
   const layoutType = detectLayoutType(parsed.rootNodes);
-  const hasNavigation = (parsed.navigation || []).length > 0;
+  const hasNavigation = parsed.navigation.length > 0;
   const hasFooter = parsed.footer !== null;
   const contentDensity = calculateContentDensity(parsed);
   const { difficulty, difficultyReason } = calculateDifficulty(parsed, layoutType);
@@ -153,10 +153,10 @@ function detectLayoutType(rootNodes: RawDOMNode[]): LayoutType {
  */
 function calculateContentDensity(parsed: RawParsedDOM): ContentDensity {
   const textLength = parsed.rawTextContent?.length || 0;
-  const imageCount = (parsed.allImages || []).length;
-  const formCount = (parsed.allForms || []).length;
+  const imageCount = parsed.allImages.length;
+  const formCount = parsed.allForms.length;
   const nodeCount = parsed.totalNodes;
-  const ctaCount = (parsed.ctas || []).length;
+  const ctaCount = parsed.ctas.length;
 
   let score = 0;
 
@@ -224,8 +224,8 @@ function calculateDifficulty(
   }
 
   // Forms add complexity
-  if ((parsed.allForms || []).length > 0) {
-    const totalFields = (parsed.allForms || []).reduce((sum, f) => sum + (f.fields || []).length, 0);
+  if (parsed.allForms.length > 0) {
+    const totalFields = parsed.allForms.reduce((sum, f) => sum + f.fields.length, 0);
     if (totalFields > 10) {
       score += 3;
       reasons.push('complex forms');
@@ -238,24 +238,24 @@ function calculateDifficulty(
   }
 
   // Navigation complexity
-  if ((parsed.navigation || []).some(item => (item.children || []).length > 0)) {
+  if (parsed.navigation.some(item => item.children.length > 0)) {
     score += 1;
     reasons.push('dropdown menus');
   }
 
   // Embeds add complexity
-  if ((parsed.embeds || []).length > 0) {
+  if (parsed.embeds.length > 0) {
     score += 1;
     reasons.push('embedded content');
   }
 
   // Multiple CTAs
-  if ((parsed.ctas || []).length > 5) {
+  if (parsed.ctas.length > 5) {
     score += 1;
   }
 
   // Footer complexity
-  if (parsed.footer && (parsed.footer.columns || []).length > 3) {
+  if (parsed.footer && parsed.footer.columns.length > 3) {
     score += 1;
     reasons.push('detailed footer');
   }

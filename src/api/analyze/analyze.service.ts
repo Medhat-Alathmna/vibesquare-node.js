@@ -1,8 +1,9 @@
-import { executePipeline, LLMModel, PipelineResult } from './pipeline';
+import { executePipeline, LLMModel, PipelineResult, UserTier } from './pipeline';
 
 export interface AnalyzeOptions {
   url: string;
   model?: LLMModel;
+  tier?: UserTier;
 }
 
 export class AnalyzeService {
@@ -16,6 +17,7 @@ export class AnalyzeService {
     return executePipeline({
       url: options.url,
       model: options.model,
+      tier: options.tier,
     });
   }
 }

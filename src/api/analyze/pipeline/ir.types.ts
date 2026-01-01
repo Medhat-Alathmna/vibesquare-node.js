@@ -268,9 +268,8 @@ export interface IntermediateRepresentation {
 
 // ============ Final Output Types ============
 export interface AnalysisResult {
-  prompt?: string; // Optional: generated prompt (if interpreter is used)
+  prompt: string;
   metadata: {
-    finalParsedDOM?: RawParsedDOM | any; // Optional: full parsed DOM for debugging
     sourceUrl: string;
     nodesFound: number;
     layoutType: LayoutType;

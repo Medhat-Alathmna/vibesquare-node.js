@@ -26,15 +26,14 @@ import {
   EnhancedParsedDOM,
   VisualParsedDOM,
 } from './ir.types';
-import {
-  UserTier,
-  estimateTokens,
-} from './token-budget';
+
 import { encode } from '@toon-format/toon';
+import { UserTier } from './token-budget';
 
 export interface PipelineOptions {
   url: string;
   model?: LLMModel;
+  tier?: UserTier;
   useEnhancedParser?: boolean;  // Use enhanced parser with layout/visual signals
   useVisualParser?: boolean;    // Use V2 visual parser (complete redesign)
 }
@@ -60,7 +59,7 @@ export interface PipelineResult extends AnalysisResult {
 
 export async function executePipeline(options: PipelineOptions): Promise<PipelineResult> {
   const startTime = Date.now();
-  const { url, model = 'gemini-1.5-flash', useEnhancedParser, useVisualParser } = options;
+  const { url, model = 'gemini-1.5-flash', tier, useEnhancedParser, useVisualParser } = options;
 
   // Step 1: Fetch URL
   const fetchResult = await fetcher.fetch(url);
@@ -71,32 +70,26 @@ export async function executePipeline(options: PipelineOptions): Promise<Pipelin
   // Standard Parser Path
   const parsedDOM = parser.parse(normalizedResult, fetchResult.finalUrl);
 
-  // No specific token budget application here anymore.
-  // We just use the parsedDOM as is.
-  const finalParsedDOM: RawParsedDOM = parsedDOM;
-
   // Step 4: Structural Analysis (NO AI)
-  const structuralAnalysis = analyzer.analyze(finalParsedDOM as RawParsedDOM);
+  const structuralAnalysis = analyzer.analyze(parsedDOM);
 
   // Step 5: Design Interpretation → Final Prompt (OpenAI or Gemini)
-
-  // const designPrompt = await interpreter.interpret(finalParsedDOM as RawParsedDOM, structuralAnalysis, model);
+  // LLM generates the production-ready prompt directly
+  const designPrompt = await interpreter.interpret(parsedDOM, structuralAnalysis, model);
 
   // Use finalPrompt directly from LLM - no synthesizer needed
-
-  // const prompt = designPrompt.finalPrompt;
+  const prompt = designPrompt.finalPrompt;
 
   const processingTimeMs = Date.now() - startTime;
 
   return {
-    // prompt,
+    prompt,
     metadata: {
-      finalParsedDOM,
       sourceUrl: fetchResult.finalUrl,
       nodesFound: structuralAnalysis.nodeCount,
       layoutType: structuralAnalysis.layoutType,
       difficulty: structuralAnalysis.difficulty,
-      language: finalParsedDOM.language,
+      language: parsedDOM.language,
       processingTimeMs,
     },
     processingTimeMs,
@@ -109,12 +102,6 @@ export { normalizer } from './normalizer';
 export { parser } from './parser';
 export { analyzer } from './analyzer';
 export { interpreter } from './interpreter';
-
-// Export token budget utilities
-export {
-  UserTier,
-  estimateTokens,
-} from './token-budget';
 
 // Export model types and utilities
 export type {
@@ -131,3 +118,6 @@ export {
   getProvider,
   isValidModel,
 } from './interpreter';
+
+// Export token budget utilities
+export { estimateTokens, UserTier, TIER_CONFIGS } from './token-budget';

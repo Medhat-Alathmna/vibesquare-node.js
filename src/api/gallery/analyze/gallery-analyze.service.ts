@@ -140,13 +140,14 @@ export class GalleryAnalyzeService {
       const result = await executePipeline({
         url,
         model,
+        tier: this.mapGalleryTierToPipelineTier(tier)
       });
 
       // Calculate actual tokens used
       const tokensUsed = result.debug?.parsedDOMTokens || estimate.estimatedTokens;
 
       // Format the prompt to fix \n issues
-      const formattedPrompt = this.formatPromptResponse(result.prompt || '');
+      const formattedPrompt = this.formatPromptResponse(result.prompt);
 
       // Extract page info from parsedDOM metadata
       const parsedDOM = result.debug?.parsedDOM as any;
@@ -239,7 +240,19 @@ export class GalleryAnalyzeService {
     await galleryAnalysisRepository.softDelete(analysisId);
   }
 
-
+  /**
+   * Map gallery subscription tier to pipeline user tier
+   */
+  private mapGalleryTierToPipelineTier(tier: GallerySubscriptionTier): 'free' | 'basic' | 'pro' | 'enterprise' {
+    switch (tier) {
+      case 'free':
+        return 'basic'; // Gallery free users get basic tier data extraction
+      case 'pro':
+        return 'pro';
+      default:
+        return 'basic';
+    }
+  }
 
   /**
    * Format prompt response to fix escape sequences

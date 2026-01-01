@@ -41,15 +41,5 @@ export const analyzeUrl = {
       .messages({
         'any.only': `Tier must be one of: ${USER_TIERS.join(', ')}`,
       }),
-    customBudget: Joi.object({
-      maxTokens: Joi.number().min(100).max(100000).optional(),
-      maxCSSClasses: Joi.number().min(-1).optional(),
-      maxColors: Joi.number().min(-1).optional(),
-      maxImages: Joi.number().min(-1).optional(),
-      maxSections: Joi.number().min(-1).optional(),
-      maxNavItems: Joi.number().min(-1).optional(),
-      includeCSSDetails: Joi.boolean().optional(),
-      includeAllMetadata: Joi.boolean().optional(),
-    }).optional(),
   }),
 };
