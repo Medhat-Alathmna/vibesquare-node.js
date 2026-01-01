@@ -41,18 +41,6 @@ router.get(
 );
 
 /**
- * @route POST /api/gallery/favorites/check-multiple
- * @desc Check if multiple projects are favorited
- * @access Private
- */
-router.post(
-  '/check-multiple',
-  galleryAuthenticate(),
-  validate(favoritesValidator.checkMultiple),
-  favoritesController.checkMultiple
-);
-
-/**
  * @route GET /api/gallery/favorites/check/:projectId
  * @desc Check if a specific project is favorited
  * @access Private

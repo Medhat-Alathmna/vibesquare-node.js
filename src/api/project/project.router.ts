@@ -2,23 +2,27 @@ import { Router } from 'express';
 import * as projectController from './project.controller';
 import { validate } from '../../middleware/validation.middleware';
 import * as projectValidator from './project.validator';
+import { optionalGalleryAuth } from '../../middleware/gallery-auth.middleware';
 
 const router = Router();
 
 // GET /api/projects - List with pagination & filters
 router.get('/',
+  optionalGalleryAuth(),
   validate(projectValidator.listProjects),
   projectController.getProjects
 );
 
 // GET /api/projects/search - Search with filters
 router.get('/search',
+  optionalGalleryAuth(),
   validate(projectValidator.searchProjects),
   projectController.searchProjects
 );
 
 // GET /api/projects/:id - Single project
 router.get('/:id',
+  optionalGalleryAuth(),
   validate(projectValidator.getProjectById),
   projectController.getProjectById
 );

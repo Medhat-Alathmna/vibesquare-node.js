@@ -17,6 +17,7 @@ export interface ProjectSummary {
     name: string;
     avatarUrl?: string;
   };
+  hasLiked?: boolean;
 }
 
 // Full Project data for detail view
@@ -48,6 +49,7 @@ export interface ProjectData {
   collectionIds: string[];
   builder?: Builder;
   builderSocialLinks?: BuilderSocialLinks;
+  hasLiked?: boolean;
 }
 
 export interface ProjectsResult {

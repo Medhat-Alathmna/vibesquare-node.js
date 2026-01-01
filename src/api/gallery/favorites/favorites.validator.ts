@@ -12,11 +12,5 @@ export const favoritesValidator = {
     params: Joi.object({
       projectId: Joi.string().required()
     })
-  },
-
-  checkMultiple: {
-    body: Joi.object({
-      projectIds: Joi.array().items(Joi.string()).min(1).max(100).required()
-    })
   }
 };

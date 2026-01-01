@@ -90,6 +90,15 @@ VISUAL IDENTITY RULES
 - If halftone, gradients, or retro effects are mentioned, describe them as OPTIONAL stylistic layers — never mandatory.
 
 ────────────────────────
+IMAGE HANDLING & ENFORCEMENT
+────────────────────────
+  - You MUST explicitly include the exact image URL in the corresponding section.
+  - You MUST associate each image with its intended role and approximate placement.
+  - You MUST NOT modify, replace, infer, or generalize image sources.
+  - You MUST NOT omit any provided image.
+  - Just mention the image URL in the prompt.
+
+────────────────────────
 AMBIGUITY HANDLING (CRITICAL)
 ────────────────────────
 If any of the following are unclear or implied but not explicit:
@@ -108,18 +117,7 @@ Example format:
 "⚠ User clarification required:
 Ask the user whether the header should be fixed, floating, or static."
 
-━━━━━━━━━━━━━━━━━━━━━━
-IMAGE HANDLING RULES
-━━━━━━━━━━━━━━━━━━━━━━
 
-- If an image src is relative (e.g. /assets/img/x.png):
-  You MUST rewrite it conceptually as:
-  src = {siteUrl}/assets/img/x.png
-
-- If an image is missing, broken, or non-http:
-  - Infer image intent from context (hero, dashboard, product, avatar)
-  - Instruct AI CODE GENERATOR to use MOCK / PLACEHOLDER images
-    that match the context and style.
 ────────────────────────
 ANIMATIONS
 ────────────────────────

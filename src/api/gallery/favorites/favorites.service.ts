@@ -5,8 +5,12 @@ import {
   galleryFavoritesRepository,
   galleryActivityLogRepository
 } from '../../../shared/repositories/postgres/gallery.repository';
+import { getProjectRepository } from '../../../shared/repositories';
 
 export class FavoritesService {
+  private get projectRepository() {
+    return getProjectRepository();
+  }
   /**
    * Get user's favorites with pagination
    */
@@ -42,6 +46,9 @@ export class FavoritesService {
 
     const favorite = await galleryFavoritesRepository.create(userId, projectId);
 
+    // Increment project likes count
+    await this.projectRepository.incrementStat(projectId, 'likes');
+
     // Log activity
     await galleryActivityLogRepository.create({
       userId,
@@ -71,6 +78,13 @@ export class FavoritesService {
       throw new ApiError(httpStatus.NOT_FOUND, 'Favorite not found');
     }
 
+    // Decrement project likes count
+    const project = await this.projectRepository.findById(projectId);
+    if (project && project.likes > 0) {
+      // Only decrement if likes > 0 to prevent negative values
+      await this.projectRepository.update(projectId, { likes: project.likes - 1 });
+    }
+
     // Log activity
     await galleryActivityLogRepository.create({
       userId,
@@ -96,24 +110,6 @@ export class FavoritesService {
    */
   async getFavoritesCount(userId: string): Promise<number> {
     return galleryFavoritesRepository.countByUserId(userId);
-  }
-
-  /**
-   * Check multiple projects at once (for list views)
-   */
-  async checkMultipleFavorites(
-    userId: string,
-    projectIds: string[]
-  ): Promise<Record<string, boolean>> {
-    const favoriteIds = await galleryFavoritesRepository.getProjectIds(userId);
-    const favoriteSet = new Set(favoriteIds);
-
-    const result: Record<string, boolean> = {};
-    for (const projectId of projectIds) {
-      result[projectId] = favoriteSet.has(projectId);
-    }
-
-    return result;
   }
 }
 

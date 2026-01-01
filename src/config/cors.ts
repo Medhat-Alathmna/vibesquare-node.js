@@ -6,7 +6,8 @@ export const corsOptions: CorsOptions = {
     const allowedOrigins = [
       env.FRONTEND_URL,
       'http://localhost:4200',
-      'http://localhost:3000'
+      'http://localhost:3000',
+      'https://vibesquare.infinityfree.me'
     ];
 
     // Allow requests with no origin (mobile apps, Postman, etc.)

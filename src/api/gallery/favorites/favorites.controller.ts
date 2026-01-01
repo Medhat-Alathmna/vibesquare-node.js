@@ -114,27 +114,6 @@ export const favoritesController = {
   }),
 
   /**
-   * Check multiple projects at once
-   * POST /api/gallery/favorites/check-multiple
-   */
-  checkMultiple: asyncHandler(async (req: Request, res: Response) => {
-    if (!req.galleryUser) {
-      return res.status(httpStatus.UNAUTHORIZED).json(
-        ApiResponse.error('Authentication required', httpStatus.UNAUTHORIZED)
-      );
-    }
-
-    const { projectIds } = req.body;
-
-    const result = await favoritesService.checkMultipleFavorites(
-      req.galleryUser.id,
-      projectIds
-    );
-
-    res.json(ApiResponse.success(result));
-  }),
-
-  /**
    * Get favorites count
    * GET /api/gallery/favorites/count
    */
