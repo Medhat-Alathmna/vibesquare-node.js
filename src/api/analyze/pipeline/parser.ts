@@ -40,6 +40,47 @@ const CTA_KEYWORDS = [
 ];
 
 /**
+ * Resolve relative URLs to absolute URLs
+ * Handles all relative URL patterns (assets/, ./assets/, ../assets/, /path, etc.)
+ */
+function resolveUrl(url: string, baseUrl: string): string {
+  if (!url || !baseUrl) return url;
+
+  // Already absolute URL (starts with protocol or //)
+  if (/^(https?:)?\/\//i.test(url)) {
+    return url;
+  }
+
+  // Data URLs, blob URLs, etc.
+  if (/^(data|blob|mailto):/i.test(url)) {
+    return url;
+  }
+
+  // Use URL API to properly resolve relative URLs
+  try {
+    const resolved = new URL(url, baseUrl);
+    return resolved.toString();
+  } catch (error) {
+    // If URL parsing fails, try manual concatenation
+    // Remove trailing slash from baseUrl
+    const cleanBase = baseUrl.replace(/\/$/, '');
+
+    // If URL starts with /, replace the path completely
+    if (url.startsWith('/')) {
+      try {
+        const baseUrlObj = new URL(cleanBase);
+        return `${baseUrlObj.origin}${url}`;
+      } catch {
+        return `${cleanBase}${url}`;
+      }
+    }
+
+    // Otherwise, append to base URL
+    return `${cleanBase}/${url.replace(/^\.\//, '')}`;
+  }
+}
+
+/**
  * Parse HTML into RawParsedDOM - Full hierarchical DOM representation
  * NO semantic interpretation - just raw extraction
  */
@@ -96,15 +137,13 @@ export function parseHtml(
   const navigation = extractNavigation(document);
   const colors = extractColors(document);
   const fonts = normalizedResult.extractedFonts;
-  const ctas = extractCTAs(document);
-  const footer = extractFooter(document);
   const socialLinks = extractSocialLinks(document);
   const embeds = normalizedResult.extractedEmbeds;
   const metadata = extractMetadata(document);
   const language = detectLanguage(document);
   const rawTextContent = getRawTextContent(document);
 
-  return {
+  const rawParsedDOM = {
     rootNodes,
     totalNodes,
     allImages,
@@ -112,15 +151,18 @@ export function parseHtml(
     navigation,
     fonts,
     colors,
-    ctas,
-    footer,
-    socialLinks,
     embeds,
+    ctas: extractCTAs(document),
+    footer: null,
+    socialLinks,
     metadata,
     language,
     rawTextContent,
     cssInfo: normalizedResult.extractedCSS,
   };
+
+  // Clean the parsed DOM by removing empty properties
+  return cleanParsedDOM(rawParsedDOM);
 }
 
 /**
@@ -239,11 +281,7 @@ function extractNodeRecursive(
   directImgs.forEach(img => {
     let src = img.getAttribute('src') || img.getAttribute('data-src') || '';
     if (src) {
-      try {
-        src = new URL(src, baseUrl).toString();
-      } catch {
-        // Keep as-is
-      }
+      src = resolveUrl(src, baseUrl);
       images.push({
         url: src,
         alt: (img as HTMLImageElement).alt || undefined,
@@ -255,11 +293,7 @@ function extractNodeRecursive(
   if (tag === 'img') {
     let src = element.getAttribute('src') || element.getAttribute('data-src') || '';
     if (src) {
-      try {
-        src = new URL(src, baseUrl).toString();
-      } catch {
-        // Keep as-is
-      }
+      src = resolveUrl(src, baseUrl);
       images.push({
         url: src,
         alt: (element as HTMLImageElement).alt || undefined,
@@ -336,11 +370,7 @@ function extractBackgroundImages(
         let url = urlMatch[1];
 
         // Resolve relative URLs
-        try {
-          url = new URL(url, baseUrl).toString();
-        } catch {
-          // Keep as-is if URL parsing fails
-        }
+        url = resolveUrl(url, baseUrl);
 
         bgImages.push({
           url,
@@ -487,11 +517,7 @@ function extractImages(document: Document, baseUrl: string): ImageInfo[] {
     if (!src) return;
 
     // Resolve relative URLs
-    try {
-      src = new URL(src, baseUrl).toString();
-    } catch {
-      // Keep as-is if URL parsing fails
-    }
+    src = resolveUrl(src, baseUrl);
 
     images.push({
       url: src,
@@ -578,42 +604,6 @@ function extractCTAs(document: Document): CTAInfo[] {
   return ctas;
 }
 
-function extractFooter(document: Document): FooterInfo | null {
-  const footer = document.querySelector('footer');
-  if (!footer) return null;
-
-  const columns: FooterColumn[] = [];
-
-  // Try to find footer columns
-  const possibleColumns = footer.querySelectorAll('div > div, section, ul');
-  possibleColumns.forEach(col => {
-    const heading = col.querySelector('h3, h4, h5, h6, strong');
-    const links = col.querySelectorAll('a');
-
-    if (links.length > 0) {
-      columns.push({
-        heading: heading?.textContent?.trim(),
-        links: Array.from(links).map(link => ({
-          text: link.textContent?.trim() || '',
-          href: (link as HTMLAnchorElement).href || undefined,
-        })),
-      });
-    }
-  });
-
-  // Extract copyright
-  const copyrightMatch = footer.textContent?.match(/©\s*\d{4}[^.]*|copyright[^.]+/i);
-  const copyright = copyrightMatch?.[0]?.trim();
-
-  // Extract social links from footer
-  const socialLinks = extractSocialLinks(footer as unknown as Document);
-
-  return {
-    columns,
-    copyright,
-    socialLinks,
-  };
-}
 
 function extractSocialLinks(container: Document | Element): SocialLink[] {
   const socialLinks: SocialLink[] = [];
@@ -681,6 +671,55 @@ function getRawTextContent(document: Document): string {
   return body.textContent?.replace(/\s+/g, ' ').trim().slice(0, 5000) || '';
 }
 
+/**
+ * Clean parsed DOM by removing empty children arrays and cssProperties objects
+ * Removes: children: [], cssProperties: {}, images: [], attributes: {}
+ */
+function cleanParsedDOM<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  // Handle arrays - recursively clean each item
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanParsedDOM(item)) as T;
+  }
+
+  // Handle objects
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+
+    for (const [key, value] of Object.entries(obj)) {
+      // Skip undefined and null
+      if (value === undefined || value === null) {
+        continue;
+      }
+
+      // Skip empty arrays (children, images, etc.)
+      if (Array.isArray(value) && value.length === 0) {
+        continue;
+      }
+
+      // Skip empty objects (cssProperties, attributes, etc.)
+      if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) {
+        continue;
+      }
+
+      // Recursively clean nested objects/arrays
+      const cleanedValue = cleanParsedDOM(value);
+
+      // Add the cleaned value
+      cleaned[key] = cleanedValue;
+    }
+
+    return cleaned as T;
+  }
+
+  // Return primitives as-is
+  return obj;
+}
+
 export const parser = {
   parse: parseHtml,
+  clean: cleanParsedDOM,
 };

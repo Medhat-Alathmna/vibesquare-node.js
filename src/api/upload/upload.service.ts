@@ -1,14 +1,13 @@
-import { DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { s3Client, s3Config, isS3Configured } from '../../config/s3.config';
+import { fileRepository } from '../../shared/repositories/postgres/file.repository';
+import { uploadConfig, FileCategory } from '../../config/upload.config';
 import { ApiError } from '../../shared/utils/ApiError';
 import httpStatus from 'http-status';
+import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
+import { env } from '../../config/env';
 
-// Custom type for MulterS3 file
-export interface MulterS3File extends Express.Multer.File {
-  location: string;
-  key: string;
-  bucket: string;
-}
+// Type for uploaded file (using memory storage)
+export type UploadFile = Express.Multer.File;
 
 interface UploadedFile {
   url: string;
@@ -20,76 +19,67 @@ interface UploadedFile {
 
 export class UploadService {
   /**
-   * Process single uploaded file
+   * Generate file URL from file ID
    */
-  processUploadedFile(file: MulterS3File): UploadedFile {
-    return {
-      url: file.location,
-      key: file.key,
+  private generateFileUrl(fileId: string): string {
+    const baseUrl = env.BACKEND_URL || 'http://localhost:3000';
+    return `${baseUrl}/api/files/${fileId}`;
+  }
+
+  /**
+   * Save file to database
+   */
+  async saveFileToDatabase(
+    file: UploadFile,
+    category: FileCategory,
+    uploadedBy?: string
+  ): Promise<UploadedFile> {
+    const filename = `${uuidv4()}${path.extname(file.originalname)}`;
+
+    const fileData = await fileRepository.create({
+      filename,
       originalName: file.originalname,
+      mimeType: file.mimetype,
       size: file.size,
-      mimeType: file.mimetype
+      category,
+      fileData: file.buffer,
+      uploadedBy
+    });
+
+    return {
+      url: this.generateFileUrl(fileData.id),
+      key: fileData.id,
+      originalName: fileData.originalName,
+      size: fileData.size,
+      mimeType: fileData.mimeType
     };
   }
 
   /**
-   * Process multiple uploaded files
+   * Delete file from database
    */
-  processUploadedFiles(files: MulterS3File[]): UploadedFile[] {
-    return files.map(file => this.processUploadedFile(file));
-  }
+  async deleteFile(fileId: string): Promise<void> {
+    const deleted = await fileRepository.delete(fileId);
 
-  /**
-   * Delete file from S3
-   */
-  async deleteFile(key: string): Promise<void> {
-    if (!isS3Configured() || !s3Client) {
+    if (!deleted) {
       throw new ApiError(
-        httpStatus.SERVICE_UNAVAILABLE,
-        'File upload service is not configured'
-      );
-    }
-
-    try {
-      const command = new DeleteObjectCommand({
-        Bucket: s3Config.bucket,
-        Key: key
-      });
-
-      await s3Client.send(command);
-    } catch (error) {
-      throw new ApiError(
-        httpStatus.INTERNAL_SERVER_ERROR,
-        'Failed to delete file from storage'
+        httpStatus.NOT_FOUND,
+        'File not found'
       );
     }
   }
 
   /**
-   * Delete multiple files from S3
+   * Delete multiple files from database
    */
-  async deleteFiles(keys: string[]): Promise<void> {
-    const deletePromises = keys.map(key => this.deleteFile(key));
-    await Promise.all(deletePromises);
-  }
-
-  /**
-   * Extract key from S3 URL
-   */
-  extractKeyFromUrl(url: string): string | null {
-    try {
-      const urlObj = new URL(url);
-      // Remove leading slash
-      return urlObj.pathname.substring(1);
-    } catch {
-      return null;
-    }
+  async deleteFiles(fileIds: string[]): Promise<void> {
+    await fileRepository.deleteMultiple(fileIds);
   }
 
   /**
    * Validate that file was uploaded
    */
-  validateFileUploaded(file: MulterS3File | undefined): void {
+  validateFileUploaded(file: UploadFile | undefined): void {
     if (!file) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'No file uploaded');
     }
@@ -98,7 +88,7 @@ export class UploadService {
   /**
    * Validate that files were uploaded
    */
-  validateFilesUploaded(files: MulterS3File[] | undefined): void {
+  validateFilesUploaded(files: UploadFile[] | undefined): void {
     if (!files || files.length === 0) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'No files uploaded');
     }

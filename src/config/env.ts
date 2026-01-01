@@ -57,11 +57,8 @@ const envSchema = Joi.object({
   STRIPE_WEBHOOK_SECRET: Joi.string().optional().allow(''),
   STRIPE_PRO_PRICE_ID: Joi.string().optional().allow(''),
 
-  // AWS S3
-  AWS_ACCESS_KEY_ID: Joi.string().optional().allow(''),
-  AWS_SECRET_ACCESS_KEY: Joi.string().optional().allow(''),
-  AWS_REGION: Joi.string().default('us-east-1'),
-  AWS_S3_BUCKET: Joi.string().optional().allow(''),
+  // Backend URL for file serving
+  BACKEND_URL: Joi.string().default('http://localhost:3000'),
 
   // Default Admin
   DEFAULT_ADMIN_EMAIL: Joi.string().email().default('admin@vibesquare.io'),
@@ -128,11 +125,8 @@ export const env = {
   STRIPE_WEBHOOK_SECRET: envVars.STRIPE_WEBHOOK_SECRET as string,
   STRIPE_PRO_PRICE_ID: envVars.STRIPE_PRO_PRICE_ID as string,
 
-  // AWS S3
-  AWS_ACCESS_KEY_ID: envVars.AWS_ACCESS_KEY_ID as string,
-  AWS_SECRET_ACCESS_KEY: envVars.AWS_SECRET_ACCESS_KEY as string,
-  AWS_REGION: envVars.AWS_REGION as string,
-  AWS_S3_BUCKET: envVars.AWS_S3_BUCKET as string,
+  // Backend URL
+  BACKEND_URL: envVars.BACKEND_URL as string,
 
   // Default Admin
   DEFAULT_ADMIN_EMAIL: envVars.DEFAULT_ADMIN_EMAIL as string,

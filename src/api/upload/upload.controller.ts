@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import httpStatus from 'http-status';
 import { asyncHandler } from '../../shared/utils/asyncHandler';
 import { ApiResponse } from '../../shared/utils/ApiResponse';
-import { uploadService, MulterS3File } from './upload.service';
+import { uploadService, UploadFile } from './upload.service';
 import {
   uploadSingleImage,
   uploadMultipleImages,
@@ -10,34 +10,28 @@ import {
   uploadThumbnail
 } from '../../middleware/upload.middleware';
 
-// Wrapper to handle multer errors (for the multer middleware in array)
-const wrapMulterMiddleware = (middlewareArray: any[]) => {
-  return middlewareArray.map((middleware, index) => {
-    // Last middleware in array is the actual multer upload
-    if (index === middlewareArray.length - 1) {
-      return (req: Request, res: Response, next: NextFunction) => {
-        middleware(req, res, (err: any) => {
-          if (err) {
-            if (err.code === 'LIMIT_FILE_SIZE') {
-              return res.status(httpStatus.BAD_REQUEST).json(
-                ApiResponse.error('File size exceeds the allowed limit')
-              );
-            }
-            if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-              return res.status(httpStatus.BAD_REQUEST).json(
-                ApiResponse.error('Unexpected field name for file upload')
-              );
-            }
-            return res.status(err.statusCode || httpStatus.BAD_REQUEST).json(
-              ApiResponse.error(err.message || 'File upload failed')
-            );
-          }
-          next();
-        });
-      };
-    }
-    return middleware;
-  });
+// Wrapper to handle multer errors
+const wrapMulterMiddleware = (middleware: any) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    middleware(req, res, (err: any) => {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(httpStatus.BAD_REQUEST).json(
+            ApiResponse.error('File size exceeds the allowed limit')
+          );
+        }
+        if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+          return res.status(httpStatus.BAD_REQUEST).json(
+            ApiResponse.error('Unexpected field name for file upload')
+          );
+        }
+        return res.status(err.statusCode || httpStatus.BAD_REQUEST).json(
+          ApiResponse.error(err.message || 'File upload failed')
+        );
+      }
+      next();
+    });
+  };
 };
 
 export const uploadController = {
@@ -46,12 +40,16 @@ export const uploadController = {
    * POST /api/upload/image
    */
   uploadImage: [
-    ...wrapMulterMiddleware(uploadSingleImage),
+    wrapMulterMiddleware(uploadSingleImage),
     asyncHandler(async (req: Request, res: Response) => {
-      const file = req.file as MulterS3File;
+      const file = req.file as UploadFile;
       uploadService.validateFileUploaded(file);
 
-      const result = uploadService.processUploadedFile(file);
+      const result = await uploadService.saveFileToDatabase(
+        file,
+        'project_image',
+        (req as any).user?.id
+      );
 
       res.status(httpStatus.CREATED).json(
         ApiResponse.success(result, 'Image uploaded successfully')
@@ -64,12 +62,18 @@ export const uploadController = {
    * POST /api/upload/images
    */
   uploadImages: [
-    ...wrapMulterMiddleware(uploadMultipleImages),
+    wrapMulterMiddleware(uploadMultipleImages),
     asyncHandler(async (req: Request, res: Response) => {
-      const files = req.files as MulterS3File[];
+      const files = req.files as UploadFile[];
       uploadService.validateFilesUploaded(files);
 
-      const results = uploadService.processUploadedFiles(files);
+      const results = await Promise.all(
+        files.map(file => uploadService.saveFileToDatabase(
+          file,
+          'project_image',
+          (req as any).user?.id
+        ))
+      );
 
       res.status(httpStatus.CREATED).json(
         ApiResponse.success(results, `${results.length} images uploaded successfully`)
@@ -82,12 +86,16 @@ export const uploadController = {
    * POST /api/upload/thumbnail
    */
   uploadThumbnail: [
-    ...wrapMulterMiddleware(uploadThumbnail),
+    wrapMulterMiddleware(uploadThumbnail),
     asyncHandler(async (req: Request, res: Response) => {
-      const file = req.file as MulterS3File;
+      const file = req.file as UploadFile;
       uploadService.validateFileUploaded(file);
 
-      const result = uploadService.processUploadedFile(file);
+      const result = await uploadService.saveFileToDatabase(
+        file,
+        'project_thumbnail',
+        (req as any).user?.id
+      );
 
       res.status(httpStatus.CREATED).json(
         ApiResponse.success(result, 'Thumbnail uploaded successfully')
@@ -100,12 +108,16 @@ export const uploadController = {
    * POST /api/upload/source-code
    */
   uploadSourceCode: [
-    ...wrapMulterMiddleware(uploadSourceCode),
+    wrapMulterMiddleware(uploadSourceCode),
     asyncHandler(async (req: Request, res: Response) => {
-      const file = req.file as MulterS3File;
+      const file = req.file as UploadFile;
       uploadService.validateFileUploaded(file);
 
-      const result = uploadService.processUploadedFile(file);
+      const result = await uploadService.saveFileToDatabase(
+        file,
+        'source_code',
+        (req as any).user?.id
+      );
 
       res.status(httpStatus.CREATED).json(
         ApiResponse.success(result, 'Source code uploaded successfully')
@@ -126,7 +138,8 @@ export const uploadController = {
       );
     }
 
-    await uploadService.deleteFile(decodeURIComponent(key));
+    // key is now the file UUID
+    await uploadService.deleteFile(key);
 
     res.json(ApiResponse.success(null, 'File deleted successfully'));
   })

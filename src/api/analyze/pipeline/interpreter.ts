@@ -7,7 +7,7 @@ import {
   StructuralAnalysis,
   DesignPromptResult,
 } from './ir.types';
-import { ReducedParsedDOM } from './token-budget';
+
 import { ApiError } from '../../../shared/utils/ApiError';
 import httpStatus from 'http-status';
 
@@ -132,7 +132,6 @@ ANIMATIONS
 OUTPUT FORMAT
 ────────────────────────
 - Output ONLY the final production-ready prompt
-- Do NOT include explanations or analysis
 - Use clear sections, headings, and bullet points
 - The result must be readable, deterministic, and professional
 
@@ -313,8 +312,8 @@ function buildStructuredSummary(parsed: RawParsedDOM, structural: StructuralAnal
     tree: optimizedNodes,
     // Add specific data arrays if relevant (flat lists for reference if needed)
     // but tree should cover most.
-    forms: parsed.allForms.map(f => ({ ...f, fields: f.fields.map(field => `${field.name} (${field.type})`) })),
-    nav: parsed.navigation.map(n => n.text),
+    forms: (parsed.allForms || []).map(f => ({ ...f, fields: (f.fields || []).map(field => `${field.name} (${field.type})`) })),
+    nav: (parsed.navigation || []).map(n => n.text),
   };
 
   // 3. Serialize with JSON

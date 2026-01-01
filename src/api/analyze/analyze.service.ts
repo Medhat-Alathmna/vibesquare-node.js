@@ -1,10 +1,8 @@
-import { executePipeline, LLMModel, PipelineResult, UserTier, TokenBudgetConfig } from './pipeline';
+import { executePipeline, LLMModel, PipelineResult } from './pipeline';
 
 export interface AnalyzeOptions {
   url: string;
   model?: LLMModel;
-  tier?: UserTier;
-  customBudget?: Partial<TokenBudgetConfig>;
 }
 
 export class AnalyzeService {
@@ -18,8 +16,6 @@ export class AnalyzeService {
     return executePipeline({
       url: options.url,
       model: options.model,
-      tier: options.tier,
-      customBudget: options.customBudget,
     });
   }
 }

@@ -6,6 +6,7 @@ import { authRouter } from './auth';
 import { adminRouter } from './admin';
 import { galleryRouter } from './gallery';
 import { uploadRouter } from './upload';
+import { filesRouter } from './files';
 
 const router = Router();
 
@@ -17,6 +18,9 @@ router.use('/admin', adminRouter);
 
 // Upload routes (protected - admin only)
 router.use('/upload', uploadRouter);
+
+// Files routes (public - serves uploaded files)
+router.use('/files', filesRouter);
 
 // Gallery routes (Gallery Users)
 router.use('/gallery', galleryRouter);

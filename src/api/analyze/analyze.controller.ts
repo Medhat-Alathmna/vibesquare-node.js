@@ -5,13 +5,11 @@ import { ApiResponse } from '../../shared/utils/ApiResponse';
 import { LLMModel } from './pipeline';
 
 export const analyzeUrl = asyncHandler(async (req: Request, res: Response) => {
-  const { url, model, tier, customBudget } = req.body;
+  const { url, model } = req.body;
 
   const result = await analyzeService.analyzeUrl({
     url,
     model: model as LLMModel,
-    tier,
-    customBudget,
   });
 
   res.json(new ApiResponse(200, {

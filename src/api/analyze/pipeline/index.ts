@@ -28,10 +28,6 @@ import {
 } from './ir.types';
 import {
   UserTier,
-  TokenBudgetConfig,
-  applyTokenBudget,
-  applyCustomBudget,
-  ReducedParsedDOM,
   estimateTokens,
 } from './token-budget';
 import { encode } from '@toon-format/toon';
@@ -39,8 +35,6 @@ import { encode } from '@toon-format/toon';
 export interface PipelineOptions {
   url: string;
   model?: LLMModel;
-  tier?: UserTier;
-  customBudget?: Partial<TokenBudgetConfig>;
   useEnhancedParser?: boolean;  // Use enhanced parser with layout/visual signals
   useVisualParser?: boolean;    // Use V2 visual parser (complete redesign)
 }
@@ -48,7 +42,7 @@ export interface PipelineOptions {
 export interface PipelineDebug {
   fetchResult: FetchResult;
   normalizedResult: Omit<NormalizationResult, 'html'>; // Exclude HTML (too large)
-  parsedDOM: RawParsedDOM | ReducedParsedDOM | EnhancedParsedDOM | VisualParsedDOM;
+  parsedDOM: RawParsedDOM | EnhancedParsedDOM | VisualParsedDOM;
   structuralAnalysis?: StructuralAnalysis;
   designPrompt?: DesignPromptResult;
   parsedDOMTokens?: number;
@@ -66,7 +60,7 @@ export interface PipelineResult extends AnalysisResult {
 
 export async function executePipeline(options: PipelineOptions): Promise<PipelineResult> {
   const startTime = Date.now();
-  const { url, model = 'gemini-1.5-flash', tier, customBudget, useEnhancedParser, useVisualParser } = options;
+  const { url, model = 'gemini-1.5-flash', useEnhancedParser, useVisualParser } = options;
 
   // Step 1: Fetch URL
   const fetchResult = await fetcher.fetch(url);
@@ -77,29 +71,27 @@ export async function executePipeline(options: PipelineOptions): Promise<Pipelin
   // Standard Parser Path
   const parsedDOM = parser.parse(normalizedResult, fetchResult.finalUrl);
 
-  // Step 3.5: Apply Token Budget (if tier or custom budget specified)
-  let finalParsedDOM: RawParsedDOM | ReducedParsedDOM = parsedDOM;
-  if (customBudget) {
-    finalParsedDOM = applyCustomBudget(parsedDOM, customBudget);
-  } else if (tier) {
-    finalParsedDOM = applyTokenBudget(parsedDOM, tier);
-  }
+  // No specific token budget application here anymore.
+  // We just use the parsedDOM as is.
+  const finalParsedDOM: RawParsedDOM = parsedDOM;
 
   // Step 4: Structural Analysis (NO AI)
   const structuralAnalysis = analyzer.analyze(finalParsedDOM as RawParsedDOM);
 
   // Step 5: Design Interpretation → Final Prompt (OpenAI or Gemini)
-  // LLM generates the production-ready prompt directly
-  const designPrompt = await interpreter.interpret(finalParsedDOM as RawParsedDOM, structuralAnalysis, model);
+
+  // const designPrompt = await interpreter.interpret(finalParsedDOM as RawParsedDOM, structuralAnalysis, model);
 
   // Use finalPrompt directly from LLM - no synthesizer needed
-  const prompt = designPrompt.finalPrompt;
+
+  // const prompt = designPrompt.finalPrompt;
 
   const processingTimeMs = Date.now() - startTime;
 
   return {
-    prompt,
+    // prompt,
     metadata: {
+      finalParsedDOM,
       sourceUrl: fetchResult.finalUrl,
       nodesFound: structuralAnalysis.nodeCount,
       layoutType: structuralAnalysis.layoutType,
@@ -121,13 +113,8 @@ export { interpreter } from './interpreter';
 // Export token budget utilities
 export {
   UserTier,
-  TokenBudgetConfig,
-  TIER_CONFIGS,
-  applyTokenBudget,
-  applyCustomBudget,
   estimateTokens,
 } from './token-budget';
-export type { ReducedParsedDOM } from './token-budget';
 
 // Export model types and utilities
 export type {
