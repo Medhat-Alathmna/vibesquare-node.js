@@ -21,6 +21,44 @@ import {
 
 export class QuotaService {
   /**
+   * Get the effective quota limit for a user
+   * Returns custom limit if set, otherwise tier default
+   */
+  private async getEffectiveQuotaLimit(userId: string): Promise<{
+    limit: number;
+    isCustom: boolean;
+    tier: GallerySubscriptionTier;
+  }> {
+    const user = await galleryUserRepository.findById(userId);
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+    }
+
+    let usage = await galleryTokenUsageRepository.findByUserId(userId);
+    if (!usage) {
+      usage = await galleryTokenUsageRepository.initializeForUser(userId);
+    }
+
+    const tier = user.subscriptionTier as GallerySubscriptionTier;
+
+    // Check if custom quota is set
+    if (usage.customQuotaLimit !== null && usage.customQuotaLimit !== undefined) {
+      return {
+        limit: Number(usage.customQuotaLimit),
+        isCustom: true,
+        tier
+      };
+    }
+
+    // Use tier default
+    return {
+      limit: QUOTA_LIMITS[tier] || QUOTA_LIMITS.free,
+      isCustom: false,
+      tier
+    };
+  }
+
+  /**
    * Get current quota status for a user
    */
   async getQuotaStatus(userId: string): Promise<QuotaStatus> {
@@ -41,8 +79,7 @@ export class QuotaService {
       usage = await this.resetQuota(userId);
     }
 
-    const tier = user.subscriptionTier as GallerySubscriptionTier;
-    const limit = QUOTA_LIMITS[tier] || QUOTA_LIMITS.free;
+    const { limit, isCustom, tier } = await this.getEffectiveQuotaLimit(userId);
     const remaining = Math.max(0, limit - usage.tokensUsed);
 
     return {
@@ -53,7 +90,8 @@ export class QuotaService {
         remaining,
         periodStart: usage.quotaPeriodStart,
         periodEnd: usage.quotaPeriodEnd,
-        analysisCount: usage.analysisCount
+        analysisCount: usage.analysisCount,
+        isCustomLimit: isCustom
       },
       lifetime: {
         totalTokensUsed: usage.totalTokensUsed,
@@ -111,21 +149,18 @@ export class QuotaService {
     });
 
     // Check if quota is low (80% used)
-    const user = await galleryUserRepository.findById(userId);
-    if (user) {
-      const tier = user.subscriptionTier as GallerySubscriptionTier;
-      const limit = QUOTA_LIMITS[tier] || QUOTA_LIMITS.free;
-      const usedPercentage = (tokensAfter / limit) * 100;
+    const { limit } = await this.getEffectiveQuotaLimit(userId);
+    const usedPercentage = (tokensAfter / limit) * 100;
 
-      if (usedPercentage >= 80 && usedPercentage < 100) {
-        await galleryNotificationRepository.create({
-          userId,
-          type: 'system',
-          title: 'Quota Running Low',
-          message: `You have used ${usedPercentage.toFixed(0)}% of your weekly token quota. Consider upgrading to Pro for more tokens.`,
-          data: { quotaPercentage: usedPercentage, tier }
-        });
-      }
+    if (usedPercentage >= 80 && usedPercentage < 100) {
+      const user = await galleryUserRepository.findById(userId);
+      await galleryNotificationRepository.create({
+        userId,
+        type: 'system',
+        title: 'Quota Running Low',
+        message: `You have used ${usedPercentage.toFixed(0)}% of your weekly token quota. Consider upgrading to Pro for more tokens.`,
+        data: { quotaPercentage: usedPercentage, tier: user?.subscriptionTier }
+      });
     }
   }
 

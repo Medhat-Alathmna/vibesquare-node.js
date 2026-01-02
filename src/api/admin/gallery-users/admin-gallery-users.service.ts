@@ -365,6 +365,9 @@ export class AdminGalleryUsersService {
       usagePercentage: number;
       periodStart: Date;
       periodEnd: Date;
+      isCustom: boolean;
+      customLimit: number | null;
+      tierDefaultLimit: number;
     };
     stats: {
       totalTokensUsed: number;
@@ -394,7 +397,11 @@ export class AdminGalleryUsersService {
       });
     }
 
-    const limit = QUOTA_LIMITS[user.subscriptionTier];
+    const hasCustomQuota = usage.customQuotaLimit !== null && usage.customQuotaLimit !== undefined;
+    const customLimit = hasCustomQuota ? Number(usage.customQuotaLimit) : null;
+    const tierDefaultLimit = QUOTA_LIMITS[user.subscriptionTier];
+    const limit = hasCustomQuota ? customLimit! : tierDefaultLimit;
+
     const used = Number(usage.tokensUsed);
     const remaining = Math.max(0, limit - used);
     const usagePercentage = Math.min(100, (used / limit) * 100);
@@ -408,7 +415,10 @@ export class AdminGalleryUsersService {
         remaining,
         usagePercentage: Math.round(usagePercentage * 10) / 10,
         periodStart: usage.quotaPeriodStart,
-        periodEnd: usage.quotaPeriodEnd
+        periodEnd: usage.quotaPeriodEnd,
+        isCustom: hasCustomQuota,
+        customLimit: customLimit,
+        tierDefaultLimit: tierDefaultLimit
       },
       stats: {
         totalTokensUsed: Number(usage.totalTokensUsed),
@@ -704,6 +714,183 @@ export class AdminGalleryUsersService {
     if (!user.lastDownloadAt) return true;
     const cooldownEnd = user.lastDownloadAt.getTime() + FREE_USER_DOWNLOAD_COOLDOWN_MS;
     return Date.now() >= cooldownEnd;
+  }
+
+  /**
+   * Set custom quota limit for a user
+   */
+  async setCustomQuota(userId: string, customLimit: number, reason: string): Promise<{
+    message: string;
+    quota: {
+      previousLimit: number;
+      newLimit: number;
+      isCustom: boolean;
+      tier: GallerySubscriptionTier;
+    };
+  }> {
+    const user = await galleryUserRepository.findById(userId);
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Gallery user not found');
+    }
+
+    if (customLimit < 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Custom limit must be non-negative');
+    }
+
+    let usage = await galleryTokenUsageRepository.findByUserId(userId);
+    if (!usage) {
+      const now = new Date();
+      const periodEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      usage = await galleryTokenUsageRepository.create({
+        userId,
+        tokensUsed: 0,
+        quotaPeriodStart: now,
+        quotaPeriodEnd: periodEnd,
+        totalTokensUsed: 0,
+        analysisCount: 0,
+        totalAnalysisCount: 0
+      });
+    }
+
+    const previousLimit = usage.customQuotaLimit ?? QUOTA_LIMITS[user.subscriptionTier];
+
+    // Update custom quota
+    await galleryTokenUsageRepository.update(userId, {
+      customQuotaLimit: customLimit
+    });
+
+    // Log transaction
+    await galleryTokenTransactionRepository.create({
+      userId,
+      type: 'custom_quota_set',
+      tokensAmount: customLimit - previousLimit,
+      tokensBefore: usage.tokensUsed,
+      tokensAfter: usage.tokensUsed,
+      description: `Admin set custom quota: ${reason}`,
+      metadata: {
+        previousLimit,
+        newLimit: customLimit,
+        tier: user.subscriptionTier,
+        setBy: 'admin'
+      }
+    });
+
+    return {
+      message: 'Custom quota set successfully',
+      quota: {
+        previousLimit,
+        newLimit: customLimit,
+        isCustom: true,
+        tier: user.subscriptionTier
+      }
+    };
+  }
+
+  /**
+   * Remove custom quota and revert to tier default
+   */
+  async removeCustomQuota(userId: string, reason: string): Promise<{
+    message: string;
+    quota: {
+      previousLimit: number;
+      newLimit: number;
+      isCustom: false;
+      tier: GallerySubscriptionTier;
+    };
+  }> {
+    const user = await galleryUserRepository.findById(userId);
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Gallery user not found');
+    }
+
+    let usage = await galleryTokenUsageRepository.findByUserId(userId);
+    if (!usage || usage.customQuotaLimit === null || usage.customQuotaLimit === undefined) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'User does not have a custom quota');
+    }
+
+    const previousLimit = Number(usage.customQuotaLimit);
+    const tierLimit = QUOTA_LIMITS[user.subscriptionTier];
+
+    // Remove custom quota (set to NULL)
+    await galleryTokenUsageRepository.update(userId, {
+      customQuotaLimit: null
+    });
+
+    // Log transaction
+    await galleryTokenTransactionRepository.create({
+      userId,
+      type: 'custom_quota_set',
+      tokensAmount: tierLimit - previousLimit,
+      tokensBefore: usage.tokensUsed,
+      tokensAfter: usage.tokensUsed,
+      description: `Admin removed custom quota: ${reason}`,
+      metadata: {
+        previousLimit,
+        newLimit: tierLimit,
+        tier: user.subscriptionTier,
+        revertedToTier: true
+      }
+    });
+
+    return {
+      message: 'Custom quota removed, reverted to tier default',
+      quota: {
+        previousLimit,
+        newLimit: tierLimit,
+        isCustom: false,
+        tier: user.subscriptionTier
+      }
+    };
+  }
+
+  /**
+   * Get list of users with custom quotas
+   */
+  async getUsersWithCustomQuotas(
+    page: number = 1,
+    limit: number = 20
+  ): Promise<PaginatedResult<{
+    userId: string;
+    username: string;
+    email: string;
+    tier: GallerySubscriptionTier;
+    customLimit: number;
+    tierDefaultLimit: number;
+    tokensUsed: number;
+  }>> {
+    const offset = (page - 1) * limit;
+
+    const allUsage = await galleryTokenUsageRepository.findAllWithCustomQuota();
+    const filtered = allUsage.filter(u => u.customQuotaLimit !== null);
+
+    const paginatedUsage = filtered.slice(offset, offset + limit);
+
+    const results = await Promise.all(
+      paginatedUsage.map(async (usage) => {
+        const user = await galleryUserRepository.findById(usage.userId);
+        if (!user) return null;
+
+        return {
+          userId: user.id,
+          username: user.username,
+          email: user.email,
+          tier: user.subscriptionTier,
+          customLimit: Number(usage.customQuotaLimit),
+          tierDefaultLimit: QUOTA_LIMITS[user.subscriptionTier],
+          tokensUsed: Number(usage.tokensUsed)
+        };
+      })
+    );
+
+    const data = results.filter(r => r !== null) as any[];
+
+    return {
+      data,
+      total: filtered.length,
+      page,
+      limit,
+      totalPages: Math.ceil(filtered.length / limit)
+    };
   }
 }
 

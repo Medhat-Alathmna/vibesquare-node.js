@@ -350,7 +350,7 @@ export const FREE_USER_DOWNLOAD_COOLDOWN_MS = FREE_USER_DOWNLOAD_COOLDOWN_DAYS *
 // ============================================
 // Token Transaction Types
 // ============================================
-export const TOKEN_TRANSACTION_TYPES = ['analysis', 'reset', 'bonus', 'refund'] as const;
+export const TOKEN_TRANSACTION_TYPES = ['analysis', 'reset', 'bonus', 'refund', 'custom_quota_set'] as const;
 export type TokenTransactionType = typeof TOKEN_TRANSACTION_TYPES[number];
 
 // ============================================
@@ -368,6 +368,7 @@ export interface IGalleryTokenUsage {
   lastAnalysisAt?: Date;
   lastAnalysisUrl?: string;
   lastAnalysisTokens?: number;
+  customQuotaLimit?: number | null;  // Admin-set custom quota. NULL = use tier default
   createdAt: Date;
   updatedAt: Date;
 }
@@ -401,6 +402,7 @@ export interface QuotaStatus {
     periodStart: Date;
     periodEnd: Date;
     analysisCount: number;
+    isCustomLimit?: boolean;  // Indicates if using custom quota instead of tier default
   };
   lifetime: {
     totalTokensUsed: number;

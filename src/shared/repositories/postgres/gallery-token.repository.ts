@@ -51,7 +51,8 @@ export class GalleryTokenUsageRepository {
       totalAnalysisCount: 'total_analysis_count',
       lastAnalysisAt: 'last_analysis_at',
       lastAnalysisUrl: 'last_analysis_url',
-      lastAnalysisTokens: 'last_analysis_tokens'
+      lastAnalysisTokens: 'last_analysis_tokens',
+      customQuotaLimit: 'custom_quota_limit'
     };
 
     for (const [key, dbField] of Object.entries(fieldMap)) {
@@ -147,9 +148,17 @@ export class GalleryTokenUsageRepository {
       lastAnalysisAt: row.last_analysis_at ? new Date(row.last_analysis_at) : undefined,
       lastAnalysisUrl: row.last_analysis_url,
       lastAnalysisTokens: row.last_analysis_tokens,
+      customQuotaLimit: row.custom_quota_limit ? parseInt(row.custom_quota_limit, 10) : null,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     };
+  }
+
+  async findAllWithCustomQuota(): Promise<IGalleryTokenUsage[]> {
+    const result = await pgPool.query(
+      'SELECT * FROM gallery_token_usage WHERE custom_quota_limit IS NOT NULL ORDER BY created_at DESC'
+    );
+    return result.rows.map(this.mapRow.bind(this));
   }
 }
 

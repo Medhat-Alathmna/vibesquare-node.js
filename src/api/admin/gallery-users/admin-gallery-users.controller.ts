@@ -211,5 +211,50 @@ export const adminGalleryUsersController = {
     const stats = await adminGalleryUsersService.getQuotaStatistics();
 
     res.json(ApiResponse.success(stats));
+  }),
+
+  /**
+   * Set custom quota for user
+   * POST /api/admin/gallery-users/:id/quota/set-custom
+   */
+  setCustomQuota: asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { customLimit, reason } = req.body;
+
+    const result = await adminGalleryUsersService.setCustomQuota(
+      id,
+      customLimit,
+      reason
+    );
+
+    res.json(ApiResponse.success(result, result.message));
+  }),
+
+  /**
+   * Remove custom quota (revert to tier default)
+   * POST /api/admin/gallery-users/:id/quota/remove-custom
+   */
+  removeCustomQuota: asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const result = await adminGalleryUsersService.removeCustomQuota(id, reason);
+
+    res.json(ApiResponse.success(result, result.message));
+  }),
+
+  /**
+   * Get all users with custom quotas
+   * GET /api/admin/gallery-users/custom-quotas
+   */
+  getUsersWithCustomQuotas: asyncHandler(async (req: Request, res: Response) => {
+    const { page = 1, limit = 20 } = req.query;
+
+    const result = await adminGalleryUsersService.getUsersWithCustomQuotas(
+      Number(page),
+      Number(limit)
+    );
+
+    res.json(ApiResponse.success(result));
   })
 };

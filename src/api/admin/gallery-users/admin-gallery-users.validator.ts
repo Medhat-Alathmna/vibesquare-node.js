@@ -100,5 +100,24 @@ export const adminGalleryUsersValidator = {
       amount: Joi.number().integer().min(1).max(1000000).required(),
       reason: Joi.string().min(1).max(500).required()
     })
+  },
+
+  setCustomQuota: {
+    params: Joi.object({
+      id: Joi.string().required()
+    }),
+    body: Joi.object({
+      customLimit: Joi.number().integer().min(0).max(10000000).required(),
+      reason: Joi.string().min(1).max(500).required()
+    })
+  },
+
+  removeCustomQuota: {
+    params: Joi.object({
+      id: Joi.string().required()
+    }),
+    body: Joi.object({
+      reason: Joi.string().min(1).max(500).required()
+    })
   }
 };

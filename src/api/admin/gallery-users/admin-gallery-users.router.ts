@@ -45,6 +45,18 @@ router.get(
 );
 
 /**
+ * @route GET /api/admin/gallery-users/custom-quotas
+ * @desc Get all users with custom quotas
+ * @access Admin (gallery_users.read)
+ */
+router.get(
+  '/custom-quotas',
+  requirePermission('gallery_users.read'),
+  validate(adminGalleryUsersValidator.list),
+  adminGalleryUsersController.getUsersWithCustomQuotas
+);
+
+/**
  * @route GET /api/admin/gallery-users
  * @desc List gallery users with pagination
  * @access Admin (gallery_users.read)
@@ -200,6 +212,30 @@ router.post(
   requirePermission('gallery_users.manage'),
   validate(adminGalleryUsersValidator.addBonusTokens),
   adminGalleryUsersController.addBonusTokens
+);
+
+/**
+ * @route POST /api/admin/gallery-users/:id/quota/set-custom
+ * @desc Set custom quota limit for user
+ * @access Admin (gallery_users.manage)
+ */
+router.post(
+  '/:id/quota/set-custom',
+  requirePermission('gallery_users.manage'),
+  validate(adminGalleryUsersValidator.setCustomQuota),
+  adminGalleryUsersController.setCustomQuota
+);
+
+/**
+ * @route POST /api/admin/gallery-users/:id/quota/remove-custom
+ * @desc Remove custom quota (revert to tier default)
+ * @access Admin (gallery_users.manage)
+ */
+router.post(
+  '/:id/quota/remove-custom',
+  requirePermission('gallery_users.manage'),
+  validate(adminGalleryUsersValidator.removeCustomQuota),
+  adminGalleryUsersController.removeCustomQuota
 );
 
 export const adminGalleryUsersRouter = router;
