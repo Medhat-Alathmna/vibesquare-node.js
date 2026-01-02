@@ -234,8 +234,12 @@ function extractNodeRecursive(
   const cssProperties = extractAllCSSProperties(element, extractedClasses);
 
   // Extract images directly in this element (not nested)
+  // Extract images directly in this element (not nested)
   const images: ImageInfo[] = [];
-  const directImgs = element.querySelectorAll(':scope > img');
+  // Use manual filtering instead of :scope > img to avoid jsdom/nwsapi selector errors
+  // with complex/malformed class names or IDs
+  const directImgs = Array.from(element.children).filter(child => child.tagName.toLowerCase() === 'img');
+
   directImgs.forEach(img => {
     let src = img.getAttribute('src') || img.getAttribute('data-src') || '';
     if (src) {
@@ -378,7 +382,31 @@ function extractNavigation(document: Document): NavItem[] {
   }
 
   // Extract from nav element
-  const topLevelItems = nav.querySelectorAll(':scope > ul > li, :scope > a, :scope > div > a');
+  const topLevelItems: Element[] = [];
+
+  // Use manual traversal instead of :scope to avoid jsdom/nwsapi issues 
+  // querySelectorAll(':scope > ul > li, :scope > a, :scope > div > a')
+
+  Array.from(nav.children).forEach(child => {
+    const tag = child.tagName;
+
+    // Direct link
+    if (tag === 'A') {
+      topLevelItems.push(child);
+    }
+    // List item (ul > li)
+    else if (tag === 'UL') {
+      Array.from(child.children).forEach(li => {
+        if (li.tagName === 'LI') topLevelItems.push(li);
+      });
+    }
+    // Wrapped link (div > a)
+    else if (tag === 'DIV') {
+      Array.from(child.children).forEach(divChild => {
+        if (divChild.tagName === 'A') topLevelItems.push(divChild);
+      });
+    }
+  });
   topLevelItems.forEach(item => {
     if (item.tagName === 'A') {
       const link = item as HTMLAnchorElement;
