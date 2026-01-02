@@ -10,7 +10,9 @@ import { GoogleUserInfo, GitHubUserInfo, OAuthTokenResponse } from './auth.types
 const REFRESH_TOKEN_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  // 'none' is required for cross-domain cookies (backend on vercel, frontend on different domain)
+  // 'lax' works for same-domain only
+  sameSite: env.NODE_ENV === 'production' ? 'none' as const : 'lax' as const,
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   path: '/'
 };

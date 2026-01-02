@@ -116,4 +116,32 @@ router.get(
   galleryAuthController.getCurrentUser
 );
 
+/**
+ * @route GET /api/gallery/auth/google
+ * @desc Initiate Google OAuth login
+ * @access Public
+ */
+router.get('/google', galleryAuthController.googleAuth);
+
+/**
+ * @route GET /api/gallery/auth/google/callback
+ * @desc Google OAuth callback
+ * @access Public
+ */
+router.get('/google/callback', galleryAuthController.googleCallback);
+
+/**
+ * @route GET /api/gallery/auth/github
+ * @desc Initiate GitHub OAuth login
+ * @access Public
+ */
+router.get('/github', galleryAuthController.githubAuth);
+
+/**
+ * @route GET /api/gallery/auth/github/callback
+ * @desc GitHub OAuth callback
+ * @access Public
+ */
+router.get('/github/callback', galleryAuthController.githubCallback);
+
 export const galleryAuthRouter = router;

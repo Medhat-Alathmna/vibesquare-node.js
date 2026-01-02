@@ -9,7 +9,8 @@ import { env } from '../../../config/env';
 const REFRESH_TOKEN_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  // 'none' is required for cross-domain cookies (backend on vercel, frontend on different domain)
+  sameSite: env.NODE_ENV === 'production' ? 'none' as const : 'lax' as const,
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   path: '/'
 };
@@ -186,5 +187,200 @@ export const galleryAuthController = {
     const safeUser = galleryAuthService.toSafeUser(req.galleryUser);
 
     res.json(ApiResponse.success(safeUser));
+  }),
+
+  /**
+   * Initiate Google OAuth
+   * GET /api/gallery/auth/google
+   */
+  googleAuth: asyncHandler(async (req: Request, res: Response) => {
+    const state = req.query.returnUrl
+      ? Buffer.from(JSON.stringify({ returnUrl: req.query.returnUrl })).toString('base64')
+      : Buffer.from(JSON.stringify({ returnUrl: '/' })).toString('base64');
+
+    const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    googleAuthUrl.searchParams.set('client_id', env.GOOGLE_CLIENT_ID);
+    googleAuthUrl.searchParams.set('redirect_uri', env.GOOGLE_CALLBACK_URL);
+    googleAuthUrl.searchParams.set('response_type', 'code');
+    googleAuthUrl.searchParams.set('scope', 'openid email profile');
+    googleAuthUrl.searchParams.set('state', state);
+
+    res.redirect(googleAuthUrl.toString());
+  }),
+
+  /**
+   * Google OAuth callback
+   * GET /api/gallery/auth/google/callback
+   */
+  googleCallback: asyncHandler(async (req: Request, res: Response) => {
+    const { code, state } = req.query;
+
+    if (!code) {
+      return res.redirect(`${env.FRONTEND_URL}/login?error=oauth_failed`);
+    }
+
+    try {
+      // Exchange code for tokens
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code: code as string,
+          client_id: env.GOOGLE_CLIENT_ID,
+          client_secret: env.GOOGLE_CLIENT_SECRET,
+          redirect_uri: env.GOOGLE_CALLBACK_URL,
+          grant_type: 'authorization_code'
+        })
+      });
+
+      const tokens = await tokenResponse.json();
+
+      if (!tokens.access_token) {
+        return res.redirect(`${env.FRONTEND_URL}/login?error=oauth_failed`);
+      }
+
+      // Get user info
+      const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${tokens.access_token}` }
+      });
+
+      const userInfo = await userInfoResponse.json();
+
+      const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
+      const userAgent = req.headers['user-agent'] || 'unknown';
+
+      // Handle OAuth login
+      const result = await galleryAuthService.handleOAuthLogin(
+        'google',
+        {
+          id: userInfo.id,
+          email: userInfo.email,
+          username: userInfo.email.split('@')[0],
+          avatarUrl: userInfo.picture
+        },
+        ipAddress,
+        userAgent
+      );
+
+      // Set refresh token cookie
+      res.cookie('gallery_refresh_token', result.refreshToken, REFRESH_TOKEN_COOKIE_OPTIONS);
+
+      // Parse state for return URL
+      let returnUrl = '/';
+      try {
+        const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
+        returnUrl = stateData.returnUrl || '/';
+      } catch { }
+
+      // Redirect to frontend with access token
+      res.redirect(`${env.FRONTEND_URL}/auth/callback?token=${result.accessToken}&returnUrl=${encodeURIComponent(returnUrl)}`);
+    } catch (error) {
+      console.error('Google OAuth error:', error);
+      res.redirect(`${env.FRONTEND_URL}/login?error=oauth_failed`);
+    }
+  }),
+
+  /**
+   * Initiate GitHub OAuth
+   * GET /api/gallery/auth/github
+   */
+  githubAuth: asyncHandler(async (req: Request, res: Response) => {
+    const state = req.query.returnUrl
+      ? Buffer.from(JSON.stringify({ returnUrl: req.query.returnUrl })).toString('base64')
+      : Buffer.from(JSON.stringify({ returnUrl: '/' })).toString('base64');
+
+    const githubAuthUrl = new URL('https://github.com/login/oauth/authorize');
+    githubAuthUrl.searchParams.set('client_id', env.GITHUB_CLIENT_ID);
+    githubAuthUrl.searchParams.set('redirect_uri', env.GITHUB_CALLBACK_URL);
+    githubAuthUrl.searchParams.set('scope', 'user:email');
+    githubAuthUrl.searchParams.set('state', state);
+
+    res.redirect(githubAuthUrl.toString());
+  }),
+
+  /**
+   * GitHub OAuth callback
+   * GET /api/gallery/auth/github/callback
+   */
+  githubCallback: asyncHandler(async (req: Request, res: Response) => {
+    const { code, state } = req.query;
+
+    if (!code) {
+      return res.redirect(`${env.FRONTEND_URL}/login?error=oauth_failed`);
+    }
+
+    try {
+      // Exchange code for access token
+      const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          client_id: env.GITHUB_CLIENT_ID,
+          client_secret: env.GITHUB_CLIENT_SECRET,
+          code: code as string,
+          redirect_uri: env.GITHUB_CALLBACK_URL
+        })
+      });
+
+      const tokens = await tokenResponse.json();
+
+      if (!tokens.access_token) {
+        return res.redirect(`${env.FRONTEND_URL}/login?error=oauth_failed`);
+      }
+
+      // Get user info
+      const userInfoResponse = await fetch('https://api.github.com/user', {
+        headers: { Authorization: `Bearer ${tokens.access_token}` }
+      });
+
+      const userInfo = await userInfoResponse.json();
+
+      // Get primary email
+      const emailsResponse = await fetch('https://api.github.com/user/emails', {
+        headers: { Authorization: `Bearer ${tokens.access_token}` }
+      });
+
+      const emails = await emailsResponse.json();
+      const primaryEmail = emails.find((e: any) => e.primary)?.email || emails[0]?.email;
+
+      if (!primaryEmail) {
+        return res.redirect(`${env.FRONTEND_URL}/login?error=no_email`);
+      }
+
+      const ipAddress = req.ip || req.socket.remoteAddress || 'unknown';
+      const userAgent = req.headers['user-agent'] || 'unknown';
+
+      // Handle OAuth login
+      const result = await galleryAuthService.handleOAuthLogin(
+        'github',
+        {
+          id: userInfo.id.toString(),
+          email: primaryEmail,
+          username: userInfo.login,
+          avatarUrl: userInfo.avatar_url
+        },
+        ipAddress,
+        userAgent
+      );
+
+      // Set refresh token cookie
+      res.cookie('gallery_refresh_token', result.refreshToken, REFRESH_TOKEN_COOKIE_OPTIONS);
+
+      // Parse state for return URL
+      let returnUrl = '/';
+      try {
+        const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
+        returnUrl = stateData.returnUrl || '/';
+      } catch { }
+
+      // Redirect to frontend with access token
+      res.redirect(`${env.FRONTEND_URL}/auth/callback?token=${result.accessToken}&returnUrl=${encodeURIComponent(returnUrl)}`);
+    } catch (error) {
+      console.error('GitHub OAuth error:', error);
+      res.redirect(`${env.FRONTEND_URL}/login?error=oauth_failed`);
+    }
   })
 };
