@@ -216,6 +216,19 @@ export class PostgresProjectRepository implements IProjectRepository {
     return this.mapRowToProject(result.rows[0]);
   }
 
+  async decrementStat(id: string, field: 'views' | 'likes' | 'downloads'): Promise<ProjectData | null> {
+    const result = await pgPool.query(
+      `UPDATE projects SET ${field} = GREATEST(${field} - 1, 0), updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.mapRowToProject(result.rows[0]);
+  }
+
   async create(data: CreateProjectDTO): Promise<ProjectData> {
     const id = uuidv4();
     const result = await pgPool.query(

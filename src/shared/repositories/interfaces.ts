@@ -86,6 +86,7 @@ export interface IProjectRepository {
   findById(id: string): Promise<ProjectData | null>;
   findByIds(ids: string[]): Promise<ProjectSummary[]>;
   incrementStat(id: string, field: 'views' | 'likes' | 'downloads'): Promise<ProjectData | null>;
+  decrementStat(id: string, field: 'views' | 'likes' | 'downloads'): Promise<ProjectData | null>;
   create(data: CreateProjectDTO): Promise<ProjectData>;
   update(id: string, data: UpdateProjectDTO): Promise<ProjectData | null>;
   delete(id: string): Promise<boolean>;

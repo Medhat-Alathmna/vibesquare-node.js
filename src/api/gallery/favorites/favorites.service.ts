@@ -79,11 +79,7 @@ export class FavoritesService {
     }
 
     // Decrement project likes count
-    const project = await this.projectRepository.findById(projectId);
-    if (project && project.likes > 0) {
-      // Only decrement if likes > 0 to prevent negative values
-      await this.projectRepository.update(projectId, { likes: project.likes - 1 });
-    }
+    await this.projectRepository.decrementStat(projectId, 'likes');
 
     // Log activity
     await galleryActivityLogRepository.create({

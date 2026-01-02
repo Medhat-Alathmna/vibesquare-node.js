@@ -154,6 +154,15 @@ export class MongoProjectRepository implements IProjectRepository {
     return project as unknown as ProjectData | null;
   }
 
+  async decrementStat(id: string, field: 'views' | 'likes' | 'downloads'): Promise<ProjectData | null> {
+    const project = await Project.findOneAndUpdate(
+      { id },
+      { $inc: { [field]: -1 }, $max: { [field]: 0 } },
+      { new: true }
+    ).lean();
+    return project as unknown as ProjectData | null;
+  }
+
   async create(data: CreateProjectDTO): Promise<ProjectData> {
     const projectData = {
       id: uuidv4(),
