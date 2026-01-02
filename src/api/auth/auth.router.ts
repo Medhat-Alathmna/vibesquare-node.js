@@ -29,13 +29,16 @@ const authLimiter = rateLimit({
 // Public Routes (no auth required)
 // ============================================
 
-// Register
-router.post(
-  '/register',
-  authLimiter,
-  validate(authValidator.register),
-  authController.register
-);
+// Register - DISABLED
+// Admin users should ONLY be created through the admin panel
+// Public users should use /api/gallery/auth/register instead
+
+// router.post(
+//   '/register',
+//   authLimiter,
+//   validate(authValidator.register),
+//   authController.register
+// );
 
 // Login
 router.post(
@@ -90,16 +93,10 @@ router.post(
 );
 
 // ============================================
-// OAuth Routes
+// OAuth Routes - DISABLED
 // ============================================
-
-// Google OAuth
-router.get('/google', authController.googleAuth);
-router.get('/google/callback', authController.googleCallback);
-
-// GitHub OAuth
-router.get('/github', authController.githubAuth);
-router.get('/github/callback', authController.githubCallback);
+// Admin users should ONLY be created through the admin panel
+// OAuth is only available for gallery users at /api/gallery/auth/google and /api/gallery/auth/github
 
 // ============================================
 // Protected Routes (auth required)
