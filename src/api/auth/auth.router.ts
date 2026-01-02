@@ -18,7 +18,11 @@ const authLimiter = rateLimit({
     statusCode: 429
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // Use X-Forwarded-For header for IP (Vercel/serverless)
+  keyGenerator: (req) => {
+    return req.ip || req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || 'unknown';
+  }
 });
 
 // ============================================

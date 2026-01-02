@@ -11,6 +11,9 @@ import { corsOptions } from './config';
 
 const app: Express = express();
 
+// Trust proxy - Required for Vercel/serverless environments
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 
@@ -39,7 +42,13 @@ if (process.env.NODE_ENV !== 'test') {
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
-  message: 'Too many requests, please try again later'
+  message: 'Too many requests, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Use X-Forwarded-For header for IP (Vercel/serverless)
+  keyGenerator: (req) => {
+    return req.ip || req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || 'unknown';
+  }
 });
 app.use('/api/', limiter);
 
