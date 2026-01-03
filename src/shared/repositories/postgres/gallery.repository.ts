@@ -556,6 +556,37 @@ export class GallerySubscriptionRepository {
     return result.rows[0] ? this.mapRow(result.rows[0]) : null;
   }
 
+  /**
+   * Create subscription with idempotency - returns existing if present
+   * Safe for retries and race conditions
+   */
+  async createIdempotent(
+    data: Omit<IGallerySubscription, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<IGallerySubscription> {
+    // Check if already exists
+    const existing = await this.findByUserId(data.userId);
+    if (existing) {
+      console.info(`Subscription exists for user ${data.userId}, returning existing`);
+      return existing;
+    }
+
+    // Try to create, handle race condition
+    try {
+      return await this.create(data);
+    } catch (error: any) {
+      if (error.code === '23505' &&
+          error.message?.includes('gallery_subscriptions_user_id_key')) {
+        // Race condition - fetch the one that was just created
+        console.info(`Race detected, fetching subscription for user ${data.userId}`);
+        const nowExisting = await this.findByUserId(data.userId);
+        if (nowExisting) return nowExisting;
+
+        throw new Error(`Subscription constraint error for user ${data.userId}`);
+      }
+      throw error;
+    }
+  }
+
   async findByStripeCustomerId(stripeCustomerId: string): Promise<IGallerySubscription | null> {
     const result = await pgPool.query(
       'SELECT * FROM gallery_subscriptions WHERE stripe_customer_id = $1',

@@ -425,55 +425,109 @@ export class GalleryAuthService {
 
     // If not found by provider ID, try email
     if (!user) {
-      user = await galleryUserRepository.findByEmail(profile.email);
+      const existingUserWithEmail = await galleryUserRepository.findByEmail(profile.email);
 
-      if (user) {
-        // Link provider to existing account
-        const updateData: Partial<IGalleryUser> = {};
-        if (provider === 'google') {
-          updateData.googleId = profile.id;
-        } else {
-          updateData.githubId = profile.id;
-        }
-        await galleryUserRepository.update(user.id, updateData);
-        user = await galleryUserRepository.findById(user.id);
+      if (existingUserWithEmail) {
+        // 🔐 SECURITY: Prevent auto-linking to stop account takeover
+        console.warn(
+          `OAuth ${provider} login blocked: email ${profile.email} already exists ` +
+          `(user: ${existingUserWithEmail.id})`
+        );
+
+        // Log security event
+        await galleryLoginHistoryRepository.create({
+          userId: existingUserWithEmail.id,
+          provider,
+          ipAddress: ipAddress || 'unknown',
+          userAgent: userAgent || 'unknown',
+          success: false,
+          failureReason: 'oauth_email_conflict_prevented_auto_linking'
+        });
+
+        // Send security notification (non-blocking)
+        emailService.sendAccountLinkingAttempt(
+          existingUserWithEmail.email,
+          existingUserWithEmail.username,
+          provider,
+          ipAddress || 'unknown',
+          userAgent || 'unknown'
+        ).catch(err => console.error('Failed to send security email:', err));
+
+        // Return clear error to user
+        throw new ApiError(
+          httpStatus.CONFLICT,
+          `An account with ${profile.email} already exists. ` +
+          `Please sign in with your password. Check your email for details.`
+        );
       }
+
+      // No conflict - proceed with new user creation
+      user = null;
     }
 
     // Create new user if not found
     if (!user) {
       isNewUser = true;
+      const baseUsername = profile.username || profile.email.split('@')[0];
 
-      // Generate unique username
-      let username = profile.username || profile.email.split('@')[0];
-      username = username.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20);
+      const MAX_CREATE_ATTEMPTS = 5;
+      let createAttempt = 0;
 
-      // Ensure username is unique
-      let finalUsername = username;
-      let counter = 1;
-      while (await galleryUserRepository.findByUsername(finalUsername)) {
-        finalUsername = `${username.slice(0, 16)}_${counter}`;
-        counter++;
+      while (createAttempt < MAX_CREATE_ATTEMPTS && !user) {
+        createAttempt++;
+
+        try {
+          const finalUsername = await this.generateUniqueUsername(baseUsername);
+
+          user = await galleryUserRepository.create({
+            username: finalUsername,
+            email: profile.email.toLowerCase(),
+            avatarUrl: profile.avatarUrl,
+            isActive: true,
+            emailVerified: true, // OAuth emails are verified
+            subscriptionTier: 'free',
+            socialLinks: {},
+            googleId: provider === 'google' ? profile.id : undefined,
+            githubId: provider === 'github' ? profile.id : undefined
+          });
+          break; // Success
+
+        } catch (error: any) {
+          const isUsernameConflict = error.code === '23505' &&
+            error.message?.includes('gallery_users_username_key');
+
+          if (isUsernameConflict && createAttempt < MAX_CREATE_ATTEMPTS) {
+            console.warn(`Username conflict on attempt ${createAttempt}, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, createAttempt) * 100));
+            continue;
+          }
+
+          throw new ApiError(
+            httpStatus.INTERNAL_SERVER_ERROR,
+            'Failed to create user account. Please try again.'
+          );
+        }
       }
 
-      user = await galleryUserRepository.create({
-        username: finalUsername,
-        email: profile.email.toLowerCase(),
-        avatarUrl: profile.avatarUrl,
-        isActive: true,
-        emailVerified: true, // OAuth emails are verified
-        subscriptionTier: 'free',
-        socialLinks: {},
-        googleId: provider === 'google' ? profile.id : undefined,
-        githubId: provider === 'github' ? profile.id : undefined
-      });
+      if (!user) {
+        throw new ApiError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Failed to create user account after multiple attempts'
+        );
+      }
 
-      // Create free subscription
-      await gallerySubscriptionRepository.create({
-        userId: user.id,
-        tier: 'free',
-        status: 'active'
-      });
+      // Create free subscription (idempotent for retries)
+      try {
+        await gallerySubscriptionRepository.createIdempotent({
+          userId: user.id,
+          tier: 'free',
+          status: 'active'
+        });
+      } catch (error) {
+        console.error('Subscription creation failed for new OAuth user:', error);
+        // Don't fail login - subscription can be created later
+        // User creation succeeded, allow login to proceed
+      }
 
       // Initialize token quota
       await galleryTokenUsageRepository.initializeForUser(user.id);
@@ -530,6 +584,30 @@ export class GalleryAuthService {
     if (RESERVED_USERNAMES.includes(username.toLowerCase())) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'This username is not available');
     }
+  }
+
+  /**
+   * Generate unique username with optimistic concurrency control
+   * Handles race conditions via retry mechanism
+   */
+  private async generateUniqueUsername(baseUsername: string, maxRetries = 10): Promise<string> {
+    let username = baseUsername.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20);
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      let candidate = username;
+      if (attempt > 0) {
+        // Random suffix لتقليل احتمالية التصادم
+        const randomSuffix = Math.floor(Math.random() * 10000);
+        candidate = `${username.slice(0, 16)}_${randomSuffix}`;
+      }
+
+      const existing = await galleryUserRepository.findByUsername(candidate);
+      if (!existing) return candidate;
+    }
+
+    // Fallback: timestamp-based لضمان النجاح
+    const timestamp = Date.now().toString(36);
+    return `${username.slice(0, 12)}_${timestamp}`;
   }
 
   /**

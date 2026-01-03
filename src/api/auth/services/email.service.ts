@@ -215,6 +215,86 @@ export class EmailService {
   }
 
   /**
+   * Send security alert for OAuth account linking attempt
+   */
+  async sendAccountLinkingAttempt(
+    email: string,
+    username: string,
+    provider: 'google' | 'github',
+    ipAddress: string,
+    userAgent: string
+  ): Promise<boolean> {
+    const providerName = provider === 'google' ? 'Google' : 'GitHub';
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+          .header h1 { color: white; margin: 0; font-size: 28px; }
+          .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+          .warning { background: #fff3cd; border: 2px solid #ffc107;
+                     padding: 20px; border-radius: 8px; margin: 20px 0; }
+          .info-box { background: #e7f3ff; border-left: 4px solid #2196F3;
+                      padding: 15px; margin: 15px 0; }
+          .code { font-family: 'Courier New', monospace; background: #f4f4f4;
+                  padding: 2px 6px; border-radius: 3px; }
+          .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🔐 Security Alert</h1>
+          </div>
+          <div class="content">
+            <h2>Account Linking Attempt Detected</h2>
+            <p>Hi ${username},</p>
+
+            <div class="warning">
+              <strong>⚠️ Important Security Notice</strong><br>
+              Someone attempted to sign in to VibeSquare using ${providerName} with your email address.
+            </div>
+
+            <p><strong>What happened?</strong></p>
+            <p>For security, we prevented automatic account linking. Your VibeSquare account remains secure.</p>
+
+            <div class="info-box">
+              <strong>Login Details:</strong><br>
+              <span class="code">Time:</span> ${new Date().toLocaleString()}<br>
+              <span class="code">Provider:</span> ${providerName} OAuth<br>
+              <span class="code">IP:</span> ${ipAddress}
+            </div>
+
+            <p><strong>Was this you?</strong></p>
+            <ul>
+              <li>Sign in with your existing credentials (email + password)</li>
+              <li>Link your ${providerName} account from account settings after logging in</li>
+            </ul>
+
+            <p><strong>Not you?</strong> Your account is safe - no changes were made.
+            Consider changing your password if concerned.</p>
+          </div>
+          <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} VibeSquare. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return this.sendEmail({
+      to: email,
+      subject: `🔐 Security Alert: ${providerName} Account Linking Attempt`,
+      html
+    });
+  }
+
+  /**
    * Send welcome email after verification
    */
   async sendWelcomeEmail(email: string, firstName: string): Promise<boolean> {
