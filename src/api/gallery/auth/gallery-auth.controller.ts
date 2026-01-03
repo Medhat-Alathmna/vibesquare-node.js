@@ -80,9 +80,15 @@ export const galleryAuthController = {
    * POST /api/gallery/auth/refresh
    */
   refresh: asyncHandler(async (req: Request, res: Response) => {
+    // Debug logging
+    console.log('🔍 Refresh request received');
+    console.log('   Cookies:', req.cookies);
+    console.log('   Has gallery_refresh_token:', !!req.cookies.gallery_refresh_token);
+
     const refreshToken = req.cookies.gallery_refresh_token;
 
     if (!refreshToken) {
+      console.error('❌ No refresh token found in cookies');
       return res.status(httpStatus.UNAUTHORIZED).json(
         ApiResponse.error('No refresh token provided', httpStatus.UNAUTHORIZED)
       );
