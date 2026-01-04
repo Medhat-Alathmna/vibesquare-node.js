@@ -22,7 +22,20 @@ export class UploadService {
    * Generate file URL from file ID
    */
   private generateFileUrl(fileId: string): string {
-    const baseUrl = env.BACKEND_URL || 'http://localhost:3000';
+    // Priority: 1. Explicitly set BACKEND_URL (not default localhost)
+    //           2. ADMIN_URL
+    //           3. Default to current BACKEND_URL or relative path
+    let baseUrl = env.BACKEND_URL;
+
+    const isDefaultLocal = baseUrl === 'http://localhost:3000' || !baseUrl;
+
+    if (isDefaultLocal && env.ADMIN_URL && env.ADMIN_URL !== 'http://localhost:4300') {
+      baseUrl = env.ADMIN_URL;
+    }
+
+    // Clean trailing slash
+    baseUrl = baseUrl?.replace(/\/$/, '') || '';
+
     return `${baseUrl}/api/files/${fileId}`;
   }
 
