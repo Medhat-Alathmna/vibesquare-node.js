@@ -5,11 +5,12 @@ export const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
     const allowedOrigins = [
       env.FRONTEND_URL,
+      env.ADMIN_URL,
       'http://localhost:4200',
       'http://localhost:3000',
       'https://vibesquare.infinityfree.me',
       'https://vibesquare-admin.infinityfree.me'
-    ];
+    ].map(url => url?.replace(/\/$/, '')); // Remove trailing slashes for comparison
 
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) {
@@ -23,7 +24,8 @@ export const corsOptions: CorsOptions = {
       return;
     }
 
-    if (allowedOrigins.includes(origin)) {
+    const normalizedOrigin = origin.replace(/\/$/, '');
+    if (allowedOrigins.includes(normalizedOrigin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -31,5 +33,5 @@ export const corsOptions: CorsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 };
