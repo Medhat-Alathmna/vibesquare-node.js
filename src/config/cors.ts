@@ -9,7 +9,6 @@ export const corsOptions: CorsOptions = {
       'http://localhost:4200',
       'http://localhost:3000',
       'https://vibesquare.infinityfree.me',
-      'https://vibesquare-admin.infinityfree.me'
     ].map(url => url?.replace(/\/$/, '')); // Remove trailing slashes for comparison
 
     // Allow requests with no origin (mobile apps, Postman, etc.)
