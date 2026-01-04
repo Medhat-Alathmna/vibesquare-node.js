@@ -20,9 +20,9 @@ const envSchema = Joi.object({
   POSTGRES_PASSWORD: Joi.string().required().description('PostgreSQL password'),
   POSTGRES_DATABASE: Joi.string().required().description('PostgreSQL database name'),
   POSTGRES_SSL: Joi.boolean().default(false).description('Whether to use SSL for PostgreSQL'),
-  POSTGRES_REJECT_UNAUTHORIZED: Joi.boolean().default(true).description('Whether to reject unauthorized SSL certificates'),
+  POSTGRES_REJECT_UNAUTHORIZED: Joi.boolean().default(false).description('Whether to reject unauthorized SSL certificates'),
   POSTGRES_CONNECTION_TIMEOUT: Joi.number().default(30000).description('PostgreSQL connection timeout in milliseconds'),
-  POSTGRES_IDLE_TIMEOUT: Joi.number().default(999999999).description('PostgreSQL idle timeout in milliseconds'),
+  POSTGRES_IDLE_TIMEOUT: Joi.number().default(10000).description('PostgreSQL idle timeout in milliseconds'),
 
   // JWT Configuration
   JWT_SECRET: Joi.string().min(32).default('your-super-secret-jwt-key-change-in-production-min-32-chars'),

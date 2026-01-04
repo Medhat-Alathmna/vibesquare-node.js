@@ -16,7 +16,9 @@ export const pgPool = new Proxy({} as Pool, {
         max: 20,
         idleTimeoutMillis: env.POSTGRES_IDLE_TIMEOUT,
         connectionTimeoutMillis: env.POSTGRES_CONNECTION_TIMEOUT,
-        ssl: true
+        ssl: {
+          rejectUnauthorized: env.POSTGRES_REJECT_UNAUTHORIZED
+        }
       });
     }
     return (_pgPool as any)[prop];
@@ -68,7 +70,9 @@ export const connectPostgres = async (): Promise<void> => {
         max: 20,
         idleTimeoutMillis: env.POSTGRES_IDLE_TIMEOUT,
         connectionTimeoutMillis: env.POSTGRES_CONNECTION_TIMEOUT,
-        ssl: true
+        ssl: {
+          rejectUnauthorized: env.POSTGRES_REJECT_UNAUTHORIZED
+        }
       });
     }
     const client = await _pgPool.connect();
