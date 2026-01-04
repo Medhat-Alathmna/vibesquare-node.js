@@ -7,7 +7,8 @@ export const corsOptions: CorsOptions = {
       env.FRONTEND_URL,
       'http://localhost:4200',
       'http://localhost:3000',
-      'https://vibesquare.infinityfree.me'
+      'https://vibesquare.infinityfree.me',
+      'https://vibesquare-admin.infinityfree.me'
     ];
 
     // Allow requests with no origin (mobile apps, Postman, etc.)
