@@ -441,6 +441,105 @@ export class AdminGalleryUsersService {
   }
 
   /**
+   * Get user's quota-specific transaction history (custom quota changes, resets, etc.)
+   */
+  async getUserQuotaTransactions(
+    userId: string,
+    page: number = 1,
+    limit: number = 10
+  ): Promise<PaginatedResult<{
+    id: string;
+    userId: string;
+    action: 'set_custom' | 'remove_custom' | 'reset' | 'tier_change';
+    previousLimit: number;
+    newLimit: number;
+    reason: string | null;
+    performedBy: string;
+    createdAt: Date;
+  }>> {
+    const user = await galleryUserRepository.findById(userId);
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Gallery user not found');
+    }
+
+    // Validate pagination
+    if (page < 1) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Page must be >= 1');
+    }
+    if (limit < 1 || limit > 100) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Limit must be between 1 and 100');
+    }
+
+    // Get all transactions for the user
+    const allTransactions = await galleryTokenTransactionRepository.findByUserId(
+      userId,
+      page,
+      limit
+    );
+
+    // Filter only quota-related transactions
+    const quotaTypes = ['custom_quota_set', 'reset', 'bonus', 'refund'];
+    const filteredData = allTransactions.data.filter(t =>
+      quotaTypes.includes(t.type)
+    );
+
+    // Transform to match API response format
+    const transformedData = filteredData.map(transaction => {
+      let action: 'set_custom' | 'remove_custom' | 'reset' | 'tier_change' = 'set_custom';
+      let previousLimit = 0;
+      let newLimit = 0;
+      let reason: string | null = null;
+      let performedBy = 'system';
+
+      // Determine action type and extract data
+      if (transaction.type === 'custom_quota_set') {
+        const metadata = transaction.metadata || {};
+        action = metadata.revertedToTier ? 'remove_custom' : 'set_custom';
+        previousLimit = metadata.previousLimit || 0;
+        newLimit = metadata.newLimit || 0;
+        performedBy = metadata.setBy || 'admin';
+
+        // Extract reason from description
+        const descMatch = transaction.description?.match(/: (.+)$/);
+        reason = descMatch ? descMatch[1] : transaction.description || null;
+      } else if (transaction.type === 'reset') {
+        action = 'reset';
+        previousLimit = transaction.tokensBefore;
+        newLimit = transaction.tokensAfter;
+        reason = 'Weekly quota reset';
+        performedBy = 'system';
+      } else if (transaction.type === 'bonus' || transaction.type === 'refund') {
+        // These are not quota limit changes but token adjustments
+        // We can skip them or handle differently
+        action = 'reset'; // Fallback
+        previousLimit = transaction.tokensBefore;
+        newLimit = transaction.tokensAfter;
+        reason = transaction.description || null;
+        performedBy = 'admin';
+      }
+
+      return {
+        id: transaction.id,
+        userId: transaction.userId,
+        action,
+        previousLimit,
+        newLimit,
+        reason,
+        performedBy,
+        createdAt: transaction.createdAt
+      };
+    });
+
+    return {
+      data: transformedData,
+      total: filteredData.length,
+      page,
+      limit,
+      totalPages: Math.ceil(filteredData.length / limit)
+    };
+  }
+
+  /**
    * Reset user's token quota
    */
   async resetUserQuota(userId: string, reason: string): Promise<{

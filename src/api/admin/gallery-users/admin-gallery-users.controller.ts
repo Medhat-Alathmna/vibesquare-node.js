@@ -178,6 +178,23 @@ export const adminGalleryUsersController = {
   }),
 
   /**
+   * Get user's quota transaction history (quota changes only)
+   * GET /api/admin/gallery-users/:id/quota/transactions
+   */
+  getUserQuotaTransactions: asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    const transactions = await adminGalleryUsersService.getUserQuotaTransactions(
+      id,
+      Number(page),
+      Number(limit)
+    );
+
+    res.json(ApiResponse.success(transactions));
+  }),
+
+  /**
    * Reset user's quota
    * POST /api/admin/gallery-users/:id/quota/reset
    */

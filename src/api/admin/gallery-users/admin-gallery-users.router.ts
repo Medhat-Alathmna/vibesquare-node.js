@@ -191,6 +191,18 @@ router.get(
 );
 
 /**
+ * @route GET /api/admin/gallery-users/:id/quota/transactions
+ * @desc Get user's quota-specific transaction history (custom quota changes, resets, etc.)
+ * @access Admin (gallery_users.manage)
+ */
+router.get(
+  '/:id/quota/transactions',
+  requirePermission('gallery_users.manage'),
+  validate(adminGalleryUsersValidator.quotaTransactions),
+  adminGalleryUsersController.getUserQuotaTransactions
+);
+
+/**
  * @route POST /api/admin/gallery-users/:id/quota/reset
  * @desc Reset user's quota
  * @access Admin (gallery_users.manage)
