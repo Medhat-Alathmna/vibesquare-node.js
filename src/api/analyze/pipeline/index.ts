@@ -61,7 +61,7 @@ export interface PipelineResult extends AnalysisResult {
 
 export async function executePipeline(options: PipelineOptions): Promise<PipelineResult> {
   const startTime = Date.now();
-  const { url, model = 'gemini-1.5-flash', tier, useEnhancedParser, useVisualParser } = options;
+  const { url, model = 'gemini-1.5-flash', tier} = options;
 
   // Step 1: Fetch URL
   const fetchResult = await fetcher.fetch(url);
