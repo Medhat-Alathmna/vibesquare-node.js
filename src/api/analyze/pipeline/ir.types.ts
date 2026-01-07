@@ -34,16 +34,19 @@ export interface RawDOMNode {
   // Hierarchy
   depth: number;              // Current depth level (0 = root)
   isContainer: boolean;       // Has child elements
-  children: RawDOMNode[];     // Full nested children (max depth: 20)
+  children?: RawDOMNode[];     // Full nested children (max depth: 20)
 
   // Content
   textContent: string;        // Full text content (not truncated)
 
   // CSS (NO FILTERING - classes + inline merged)
-  cssProperties: Record<string, string>;  // ALL properties merged
+  cssProperties?: Record<string, string>;  // ALL properties merged
 
   // Media
-  images: ImageInfo[];        // Images in this node (src, data-src)
+  images?: ImageInfo[];        // Images in this node (src, data-src)
+
+  // Deduplication (for consecutive similar siblings)
+  repeatCount?: number;       // Number of consecutive similar siblings this node represents (only if > 1)
 }
 
 export interface NavItem {

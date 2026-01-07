@@ -203,9 +203,12 @@ function extractDOMTree(
     rootNodes.push(node);
   }
 
+  // Deduplicate consecutive similar siblings (cards only)
+  const deduplicatedRootNodes = deduplicateConsecutiveSiblings(rootNodes);
+
   return {
-    rootNodes,
-    totalNodes: orderCounter.value,
+    rootNodes: deduplicatedRootNodes,
+    totalNodes: orderCounter.value, // Keep original count
   };
 }
 
@@ -233,7 +236,6 @@ function extractNodeRecursive(
   // Extract CSS properties (classes + inline merged)
   const cssProperties = extractAllCSSProperties(element, extractedClasses);
 
-  // Extract images directly in this element (not nested)
   // Extract images directly in this element (not nested)
   const images: ImageInfo[] = [];
   // Use manual filtering instead of :scope > img to avoid jsdom/nwsapi selector errors
@@ -307,16 +309,103 @@ function extractNodeRecursive(
     tag,
     order: currentOrder,
     id: element.id || undefined,
+    className: element.className || undefined,
     attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
     depth,
     isContainer: hasChildren,
-    children,
+    children: children.length > 0 ? children : undefined,
     textContent,
-    cssProperties,
-    images,
+    cssProperties: Object.keys(cssProperties).length > 0 ? cssProperties : undefined,
+    images: images.length > 0 ? images : undefined,
   };
 }
 
+/**
+ * Compare CSS property objects for deep equality
+ */
+function deepEqualCSS(
+  a?: Record<string, string>,
+  b?: Record<string, string>
+): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+
+  if (keysA.length !== keysB.length) return false;
+
+  for (const key of keysA) {
+    if (a[key] !== b[key]) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Check if element is a card (for safe deduplication)
+ * Only elements with 'card' in className will be deduplicated
+ */
+function isCardElement(node: RawDOMNode): boolean {
+  const className = node.className || '';
+  return className.toLowerCase().includes('card');
+}
+
+/**
+ * Check if two nodes are similar enough to deduplicate
+ * Criteria:
+ * 1. Both elements must contain 'card' in className (safety constraint)
+ * 2. Same tag
+ * 3. Same CSS properties
+ */
+function areSimilarNodes(a: RawDOMNode, b: RawDOMNode): boolean {
+  // Safety constraint: only deduplicate cards
+  if (!isCardElement(a) || !isCardElement(b)) return false;
+
+  if (a.tag !== b.tag) return false;
+  return deepEqualCSS(a.cssProperties, b.cssProperties);
+}
+
+/**
+ * Deduplicate consecutive similar siblings in a node array
+ * Applies recursively to all children
+ * Only deduplicates nodes with 'card' in className
+ */
+function deduplicateConsecutiveSiblings(
+  nodes?: RawDOMNode[]
+): RawDOMNode[] {
+  if (!nodes || nodes.length === 0) return [];
+
+  const result: RawDOMNode[] = [];
+  let i = 0;
+
+  while (i < nodes.length) {
+    const current = nodes[i];
+    let repeatCount = 1;
+
+    // Count consecutive similar siblings
+    while (
+      i + repeatCount < nodes.length &&
+      areSimilarNodes(current, nodes[i + repeatCount])
+    ) {
+      repeatCount++;
+    }
+
+    // Create deduplicated node
+    const deduplicatedNode: RawDOMNode = {
+      ...current,
+      // Recursively deduplicate children
+      children: current.children ? deduplicateConsecutiveSiblings(current.children) : undefined,
+      // Add repeatCount only if > 1
+      ...(repeatCount > 1 ? { repeatCount } : {})
+    };
+
+    result.push(deduplicatedNode);
+    i += repeatCount;
+  }
+
+  return result;
+}
 
 /**
  * Extract background images from CSS classes

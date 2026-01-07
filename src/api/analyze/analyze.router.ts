@@ -16,7 +16,7 @@ const router = Router();
  * @body {boolean} skipCache - Skip cache and force re-analysis (optional, default: false)
  */
 router.post('/',
-  authenticate(),
+  // authenticate(),
   validate(analyzeValidator.analyzeUrl),
   analyzeController.analyzeUrl
 );

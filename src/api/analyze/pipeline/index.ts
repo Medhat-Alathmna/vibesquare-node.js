@@ -50,6 +50,8 @@ export interface PipelineDebug {
 
 export interface PipelineResult extends AnalysisResult {
   processingTimeMs: number;
+  parsedDOM: RawParsedDOM | EnhancedParsedDOM | VisualParsedDOM;
+  structuralAnalysis: StructuralAnalysis;
   debug?: PipelineDebug;
 }
 
@@ -75,15 +77,17 @@ export async function executePipeline(options: PipelineOptions): Promise<Pipelin
 
   // Step 5: Design Interpretation → Final Prompt (OpenAI or Gemini)
   // LLM generates the production-ready prompt directly
-  const designPrompt = await interpreter.interpret(parsedDOM, structuralAnalysis, model);
+  // const designPrompt = await interpreter.interpret(parsedDOM, structuralAnalysis, model);
 
   // Use finalPrompt directly from LLM - no synthesizer needed
-  const prompt = designPrompt.finalPrompt;
+  // const prompt = designPrompt.finalPrompt;
 
   const processingTimeMs = Date.now() - startTime;
 
   return {
-    prompt,
+    // prompt,
+    parsedDOM,
+    structuralAnalysis,
     metadata: {
       sourceUrl: fetchResult.finalUrl,
       nodesFound: structuralAnalysis.nodeCount,
@@ -93,6 +97,12 @@ export async function executePipeline(options: PipelineOptions): Promise<Pipelin
       processingTimeMs,
     },
     processingTimeMs,
+    debug: {
+      fetchResult,
+      normalizedResult,
+      parsedDOM,
+      structuralAnalysis,
+    },
   };
 }
 

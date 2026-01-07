@@ -59,7 +59,7 @@ function calculateMaxDepth(nodes: RawDOMNode[]): number {
     if (node.depth > maxDepth) {
       maxDepth = node.depth;
     }
-    for (const child of node.children) {
+    for (const child of node.children || []) {
       traverse(child);
     }
   }
@@ -77,7 +77,7 @@ function calculateMaxDepth(nodes: RawDOMNode[]): number {
 function traverseTree(nodes: RawDOMNode[], callback: (node: RawDOMNode) => void): void {
   function traverse(node: RawDOMNode): void {
     callback(node);
-    for (const child of node.children) {
+    for (const child of node.children || []) {
       traverse(child);
     }
   }
@@ -97,11 +97,22 @@ function detectLayoutType(rootNodes: RawDOMNode[]): LayoutType {
   let totalContainers = 0;
 
   traverseTree(rootNodes, (node) => {
+    // Delete empty properties to save tokens
+    if (node.cssProperties && Object.keys(node.cssProperties).length === 0) {
+      delete node.cssProperties;
+    }
+    if (node.images && node.images.length === 0) {
+      delete node.images;
+    }
+    if (node.children && node.children.length === 0) {
+      delete node.children;
+    }
+
     if (!node.isContainer) return;
     totalContainers++;
 
-    const display = node.cssProperties['display'];
-    const gridCols = node.cssProperties['grid-template-columns'];
+    const display = node.cssProperties?.['display'];
+    const gridCols = node.cssProperties?.['grid-template-columns'];
 
     // Check for grid
     if (display === 'grid' || gridCols) {
@@ -133,7 +144,7 @@ function detectLayoutType(rootNodes: RawDOMNode[]): LayoutType {
     // Check for two-column flex layouts
     let twoColFlex = 0;
     traverseTree(rootNodes, (node) => {
-      if (node.cssProperties['display'] === 'flex' && node.children.length === 2) {
+      if (node.cssProperties?.['display'] === 'flex' && (node.children?.length || 0) === 2) {
         twoColFlex++;
       }
     });
@@ -282,7 +293,7 @@ function calculateDifficulty(
  * 100% deterministic rule-based interpretation
  */
 export function inferVisualCharacteristics(
-  cssProperties: Record<string, string>
+  cssProperties?: Record<string, string>
 ): VisualCharacteristics {
   const result: VisualCharacteristics = {
     isFixed: false,
@@ -293,6 +304,8 @@ export function inferVisualCharacteristics(
     colorRole: 'unknown',
     layoutRole: 'container'
   };
+
+  if (!cssProperties) return result;
 
   // Position rules
   if (cssProperties['position'] === 'fixed') {

@@ -333,7 +333,7 @@ function optimizeCSS(nodes: RawDOMNode[]): { cssMap: Record<number, any>, optimi
   const cssIdMap: Record<number, any> = {};
   let nextCssId = 1;
 
-  function getCssId(props: Record<string, string>): number {
+  function getCssId(props?: Record<string, string>): number {
     if (!props || Object.keys(props).length === 0) return 0;
 
     // Sort keys for deterministic signature
