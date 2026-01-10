@@ -25,3 +25,5 @@ scripts/seed.ts
 /docs
 docs/frontend-gallery-api.md
 /docs
+/.claude/commands
+/.specify

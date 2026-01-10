@@ -3,10 +3,11 @@
  *
  * Abstract base class for all agents in the multi-agent system.
  * Provides common functionality for LLM calls, error handling, and output parsing.
+ * Uses Google Gemini as the default LLM provider.
  */
 
 import { z, ZodSchema } from 'zod';
-import { openrouter, OpenRouterError } from '../providers/openrouter.client';
+import { llmProvider, LLMProviderError } from '../providers/llm-provider';
 import {
   AgentConfig,
   AgentInput,
@@ -69,9 +70,9 @@ export abstract class BaseAgent<TOutput> {
       // Build the prompt
       const userPrompt = this.buildUserPrompt(input);
 
-      // Call the LLM
-      const result = await openrouter.call({
-        model: this.config.model,
+      // Call the LLM using unified provider (defaults to Gemini)
+      const result = await llmProvider.call({
+        agentName: this.config.name,
         systemPrompt: this.config.systemPrompt,
         userPrompt,
         maxTokens: this.config.maxTokens,
@@ -96,10 +97,10 @@ export abstract class BaseAgent<TOutput> {
         processingTimeMs,
         tokenUsage: result.tokenUsage.total,
       };
-    } catch (error) {
+    } catch (error: unknown) {
       const processingTimeMs = Date.now() - startTime;
 
-      if (error instanceof OpenRouterError) {
+      if (error instanceof LLMProviderError) {
         throw new AgentExecutionError(
           this.config.name,
           `LLM call failed: ${error.message}`,
@@ -125,7 +126,7 @@ export abstract class BaseAgent<TOutput> {
    * Parse LLM response to extract JSON
    */
   protected parseResponse(content: string): TOutput {
-    return openrouter.parseJsonResponse<TOutput>(content);
+    return llmProvider.parseJsonResponse<TOutput>(content);
   }
 
   /**
@@ -248,9 +249,9 @@ export function summarizeNodes(
     const text = node.textContent ? truncateText(node.textContent.trim(), 50) : '';
     const css = node.cssProperties
       ? Object.entries(node.cssProperties)
-          .slice(0, 5)
-          .map(([k, v]) => `${k}:${v}`)
-          .join(';')
+        .slice(0, 5)
+        .map(([k, v]) => `${k}:${v}`)
+        .join(';')
       : '';
 
     return `[${node.order}] <${node.tag}>${text ? ` "${text}"` : ''}${css ? ` {${css}}` : ''}`;
