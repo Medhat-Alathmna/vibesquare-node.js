@@ -27,4 +27,5 @@ docs/frontend-gallery-api.md
 /docs
 /.auto-claude
 /.claude
+/.claude/commands
 /.specify

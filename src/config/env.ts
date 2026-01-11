@@ -13,6 +13,9 @@ const envSchema = Joi.object({
   OPENAI_API_KEY: Joi.string().optional().allow(''),
   ANTHROPIC_API_KEY: Joi.string().optional().allow(''),
   GOOGLE_AI_KEY: Joi.string().optional().allow(''),
+  OPENROUTER_API_KEY: Joi.string().optional().allow('').description('OpenRouter API key for multi-model support'),
+  REDIS_URL: Joi.string().optional().allow('').description('Redis URL for state management'),
+  DEFAULT_LLM_PROVIDER: Joi.string().valid('gemini', 'openrouter').default('gemini').description('Default LLM provider'),
 
   // PostgreSQL
   POSTGRES_HOST: Joi.string().required().description('PostgreSQL host'),
@@ -81,6 +84,9 @@ export const env = {
   OPENAI_API_KEY: envVars.OPENAI_API_KEY as string,
   ANTHROPIC_API_KEY: envVars.ANTHROPIC_API_KEY as string,
   GOOGLE_AI_KEY: envVars.GOOGLE_AI_KEY as string,
+  OPENROUTER_API_KEY: envVars.OPENROUTER_API_KEY as string,
+  REDIS_URL: envVars.REDIS_URL as string,
+  DEFAULT_LLM_PROVIDER: envVars.DEFAULT_LLM_PROVIDER as 'gemini' | 'openrouter',
 
   // PostgreSQL
   POSTGRES_HOST: envVars.POSTGRES_HOST as string,

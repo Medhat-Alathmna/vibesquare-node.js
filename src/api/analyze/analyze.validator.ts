@@ -26,6 +26,9 @@ const ALL_MODELS = [...GEMINI_MODELS, ...OPENAI_MODELS];
 // User tiers
 const USER_TIERS = ['free', 'basic', 'pro', 'enterprise'] as const;
 
+/**
+ * V1 Analyze URL Validator
+ */
 export const analyzeUrl = {
   body: Joi.object({
     url: Joi.string().uri({ scheme: ['http', 'https'] }).required()
@@ -40,6 +43,27 @@ export const analyzeUrl = {
     tier: Joi.string().valid(...USER_TIERS).optional()
       .messages({
         'any.only': `Tier must be one of: ${USER_TIERS.join(', ')}`,
+      }),
+  }),
+};
+
+/**
+ * V2 Analyze URL Validator (Multi-Agent)
+ */
+export const analyzeUrlV2 = {
+  body: Joi.object({
+    url: Joi.string().uri({ scheme: ['http', 'https'] }).required()
+      .messages({
+        'string.uri': 'URL must be a valid HTTP or HTTPS URL',
+        'any.required': 'URL is required',
+      }),
+    tier: Joi.string().valid(...USER_TIERS).optional()
+      .messages({
+        'any.only': `Tier must be one of: ${USER_TIERS.join(', ')}`,
+      }),
+    includeDebug: Joi.boolean().default(false)
+      .messages({
+        'boolean.base': 'includeDebug must be a boolean',
       }),
   }),
 };
