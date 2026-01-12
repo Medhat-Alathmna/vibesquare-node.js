@@ -1,0 +1,1028 @@
+openapi: 3.0.3
+info:
+  title: VibeSquare Collections API
+  description: API endpoints for the Collection Concept feature
+  version: 1.0.0
+
+servers:
+  - url: /api
+    description: API base path
+
+tags:
+  - name: Public Collections
+    description: Public endpoints for browsing and viewing collections
+  - name: Gallery User Collections
+    description: Authenticated gallery user collection management
+  - name: Admin Collections
+    description: Admin-only collection management
+
+paths:
+  # ============================================
+  # PUBLIC ENDPOINTS
+  # ============================================
+  /collections:
+    get:
+      tags: [Public Collections]
+      summary: List all public collections
+      description: Paginated list of public collections with filtering and sorting
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 12
+            minimum: 1
+            maximum: 50
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [recent, popular, mostProjects, alphabetical]
+            default: recent
+        - name: tags
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: false
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionsListResponse'
+
+  /collections/featured:
+    get:
+      tags: [Public Collections]
+      summary: Get featured collections
+      description: Returns collections marked as featured for homepage display
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 6
+            maximum: 12
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeaturedCollectionsResponse'
+
+  /collections/{id}:
+    get:
+      tags: [Public Collections]
+      summary: Get collection by ID
+      description: Returns collection details with projects. Increments view count.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionDetailResponse'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /collections/{id}/share:
+    get:
+      tags: [Public Collections]
+      summary: Get share metadata for collection
+      description: Returns shareable URL and Open Graph metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareMetadataResponse'
+
+  # ============================================
+  # GALLERY USER ENDPOINTS
+  # ============================================
+  /gallery/collections:
+    get:
+      tags: [Gallery User Collections]
+      summary: List user's own collections
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 12
+        - name: visibility
+          in: query
+          schema:
+            type: string
+            enum: [all, private, public]
+            default: all
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionsListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Gallery User Collections]
+      summary: Create a new collection
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCollectionRequest'
+      responses:
+        '201':
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          description: Collection limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /gallery/collections/{id}:
+    get:
+      tags: [Gallery User Collections]
+      summary: Get user's collection by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [Gallery User Collections]
+      summary: Update collection metadata
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCollectionRequest'
+      responses:
+        '200':
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Gallery User Collections]
+      summary: Delete collection (soft delete)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Collection deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /gallery/collections/{id}/projects:
+    post:
+      tags: [Gallery User Collections]
+      summary: Add project to collection
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddProjectRequest'
+      responses:
+        '201':
+          description: Project added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionProjectResponse'
+        '400':
+          description: Duplicate project or invalid project ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /gallery/collections/{id}/projects/{projectId}:
+    delete:
+      tags: [Gallery User Collections]
+      summary: Remove project from collection
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Project removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /gallery/collections/{id}/projects/reorder:
+    put:
+      tags: [Gallery User Collections]
+      summary: Reorder projects in collection
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderProjectsRequest'
+      responses:
+        '200':
+          description: Projects reordered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /gallery/collections/{id}/clone:
+    post:
+      tags: [Gallery User Collections]
+      summary: Clone a public collection
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Collection cloned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Cannot clone private collection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Collection limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /gallery/collections/{id}/stats:
+    get:
+      tags: [Gallery User Collections]
+      summary: Get collection statistics (owner only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionStatsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ============================================
+  # ADMIN ENDPOINTS
+  # ============================================
+  /admin/collections:
+    get:
+      tags: [Admin Collections]
+      summary: List all collections (admin view)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: ownerType
+          in: query
+          schema:
+            type: string
+            enum: [all, system, gallery_user]
+            default: all
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCollectionsListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Admin Collections]
+      summary: Create system collection
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateCollectionRequest'
+      responses:
+        '201':
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/collections/{id}:
+    patch:
+      tags: [Admin Collections]
+      summary: Update any collection (admin override)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateCollectionRequest'
+      responses:
+        '200':
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Admin Collections]
+      summary: Delete any collection (moderation)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: permanent
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: If true, permanently delete instead of soft delete
+      responses:
+        '200':
+          description: Collection deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/collections/{id}/restore:
+    post:
+      tags: [Admin Collections]
+      summary: Restore soft-deleted collection
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Collection restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/collections/{id}/featured:
+    put:
+      tags: [Admin Collections]
+      summary: Toggle featured status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [featured]
+              properties:
+                featured:
+                  type: boolean
+      responses:
+        '200':
+          description: Featured status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/collections/stats:
+    get:
+      tags: [Admin Collections]
+      summary: Get aggregate collection statistics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAggregateStatsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadRequest:
+      description: Invalid request data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # Request Schemas
+    CreateCollectionRequest:
+      type: object
+      required: [title, description, thumbnail]
+      properties:
+        title:
+          type: string
+          minLength: 3
+          maxLength: 100
+        description:
+          type: string
+          minLength: 10
+          maxLength: 1000
+        thumbnail:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+          maxItems: 10
+        visibility:
+          type: string
+          enum: [private, public]
+          default: private
+
+    UpdateCollectionRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 3
+          maxLength: 100
+        description:
+          type: string
+          minLength: 10
+          maxLength: 1000
+        thumbnail:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+          maxItems: 10
+        visibility:
+          type: string
+          enum: [private, public]
+
+    AdminCreateCollectionRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateCollectionRequest'
+        - type: object
+          properties:
+            featured:
+              type: boolean
+              default: false
+
+    AdminUpdateCollectionRequest:
+      allOf:
+        - $ref: '#/components/schemas/UpdateCollectionRequest'
+        - type: object
+          properties:
+            featured:
+              type: boolean
+
+    AddProjectRequest:
+      type: object
+      required: [projectId]
+      properties:
+        projectId:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+        notes:
+          type: string
+          maxLength: 500
+
+    ReorderProjectsRequest:
+      type: object
+      required: [projectIds]
+      properties:
+        projectIds:
+          type: array
+          items:
+            type: string
+          description: Ordered list of project IDs
+
+    # Response Schemas
+    Collection:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        thumbnail:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        ownerId:
+          type: string
+          nullable: true
+        ownerType:
+          type: string
+          enum: [system, gallery_user]
+        visibility:
+          type: string
+          enum: [private, public]
+        featured:
+          type: boolean
+        projectCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CollectionWithProjects:
+      allOf:
+        - $ref: '#/components/schemas/Collection'
+        - type: object
+          properties:
+            projects:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProjectSummary'
+
+    ProjectSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        shortDescription:
+          type: string
+        thumbnail:
+          type: string
+        framework:
+          type: string
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    CollectionStats:
+      type: object
+      properties:
+        views:
+          type: integer
+        uniqueVisitors:
+          type: integer
+        clones:
+          type: integer
+        projectClicks:
+          type: integer
+        lastViewedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+        hasMore:
+          type: boolean
+
+    # API Response Wrappers
+    CollectionResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        data:
+          $ref: '#/components/schemas/Collection'
+        message:
+          type: string
+
+    CollectionDetailResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        data:
+          $ref: '#/components/schemas/CollectionWithProjects'
+        message:
+          type: string
+
+    CollectionsListResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        data:
+          type: object
+          properties:
+            collections:
+              type: array
+              items:
+                $ref: '#/components/schemas/Collection'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        message:
+          type: string
+
+    FeaturedCollectionsResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Collection'
+        message:
+          type: string
+
+    AdminCollectionsListResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        data:
+          type: object
+          properties:
+            collections:
+              type: array
+              items:
+                allOf:
+                  - $ref: '#/components/schemas/Collection'
+                  - type: object
+                    properties:
+                      isDeleted:
+                        type: boolean
+                      deletedAt:
+                        type: string
+                        format: date-time
+                        nullable: true
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        message:
+          type: string
+
+    CollectionProjectResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            collectionId:
+              type: string
+            projectId:
+              type: string
+            position:
+              type: integer
+            addedAt:
+              type: string
+              format: date-time
+        message:
+          type: string
+
+    CollectionStatsResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        data:
+          $ref: '#/components/schemas/CollectionStats'
+        message:
+          type: string
+
+    ShareMetadataResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        data:
+          type: object
+          properties:
+            url:
+              type: string
+            title:
+              type: string
+            description:
+              type: string
+            image:
+              type: string
+            embedCode:
+              type: string
+        message:
+          type: string
+
+    AdminAggregateStatsResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        data:
+          type: object
+          properties:
+            totalCollections:
+              type: integer
+            systemCollections:
+              type: integer
+            userCollections:
+              type: integer
+            featuredCollections:
+              type: integer
+            totalViews:
+              type: integer
+            totalClones:
+              type: integer
+        message:
+          type: string
+
+    SuccessResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        data:
+          type: object
+          nullable: true
+        message:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        statusCode:
+          type: integer
+        message:
+          type: string
+        error:
+          type: string
