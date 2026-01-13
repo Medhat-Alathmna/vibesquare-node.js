@@ -20,4 +20,13 @@ router.get('/:id',
   collectionController.getCollectionById
 );
 
+// POST /api/collections/:id/projects/:projectId/click - Track project click
+router.post('/:id/projects/:projectId/click', collectionController.trackProjectClick);
+
+// GET /api/collections/:id/share - Get share metadata (OG tags, etc)
+router.get('/:id/share',
+  validate(collectionValidator.getCollectionById),
+  collectionController.getCollectionShareMetadata
+);
+
 export default router;

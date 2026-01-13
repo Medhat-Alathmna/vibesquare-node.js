@@ -1,6 +1,6 @@
 import httpStatus from 'http-status';
 import { ApiError } from '../../../shared/utils/ApiError';
-import { getProjectRepository, ProjectData, ProjectListResult } from '../../../shared/repositories';
+import { getProjectRepository, getCollectionRepository, ProjectData, ProjectListResult } from '../../../shared/repositories';
 import { CreateProjectDTO, UpdateProjectDTO, Framework, Category } from '../../../shared/types';
 
 interface ListProjectsOptions {
@@ -76,6 +76,9 @@ export class AdminProjectsService {
     if (!existingProject) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Project not found');
     }
+
+    // Cascading deletion from collections
+    await getCollectionRepository().removeProjectFromAllCollections(id);
 
     const deleted = await this.repository.delete(id);
 

@@ -5,6 +5,7 @@ import {
   roleRepository,
   subscriptionRepository
 } from '../../../shared/repositories/postgres/auth.repository';
+import { getCollectionRepository } from '../../../shared/repositories';
 import { passwordService } from '../../auth/services/password.service';
 import { IUser, SafeUser, IRole } from '../../auth/auth.types';
 
@@ -217,6 +218,11 @@ export class UsersService {
     if (user.isSystem) {
       throw new ApiError(httpStatus.FORBIDDEN, 'Cannot delete system user');
     }
+
+    // Cascading deletion for collections
+    // Users in auth are either gallery_users or system/admins. 
+    // If they have collections, we want to soft delete them.
+    await getCollectionRepository().softDeleteAllByOwner(id, 'gallery_user');
 
     const deleted = await userRepository.delete(id);
 

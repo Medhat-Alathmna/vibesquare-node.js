@@ -31,7 +31,10 @@ import {
 import { galleryTokenService } from '../auth/gallery-token.service';
 import { galleryAnalysisRepository } from '../../../shared/repositories/postgres/gallery-analysis.repository';
 import { galleryTokenUsageRepository } from '../../../shared/repositories/postgres/gallery-token.repository';
-import { getProjectRepository } from '../../../shared/repositories';
+import {
+  getProjectRepository,
+  getCollectionRepository
+} from '../../../shared/repositories';
 
 export class GalleryUsersService {
   /**
@@ -237,6 +240,9 @@ export class GalleryUsersService {
     if (!user) {
       throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
     }
+
+    // Cascading deletion for collections
+    await getCollectionRepository().softDeleteAllByOwner(userId, 'gallery_user');
 
     // Soft delete
     await galleryUserRepository.softDelete(userId);

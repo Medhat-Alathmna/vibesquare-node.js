@@ -3,6 +3,7 @@ import { usersRouter } from './users';
 import { rolesRouter } from './roles';
 import { adminGalleryUsersRouter } from './gallery-users';
 import { adminProjectsRouter } from './projects';
+import { adminCollectionsRouter } from './collections/admin-collection.router';
 import { rolesController } from './roles/roles.controller';
 import { authenticate, requireAdminAccess, requirePermission } from '../../middleware/auth.middleware';
 
@@ -19,6 +20,9 @@ router.use('/gallery-users', adminGalleryUsersRouter);
 
 // Projects management
 router.use('/projects', adminProjectsRouter);
+
+// Collections management
+router.use('/collections', adminCollectionsRouter);
 
 // Permissions routes (separate from roles for easier access)
 router.get(

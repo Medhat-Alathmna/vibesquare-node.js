@@ -58,6 +58,14 @@ export interface SearchOptions extends ProjectQueryOptions {
   categories?: Category[];
 }
 
+export interface CollectionQueryOptions extends QueryOptions {
+  search?: string;
+  visibility?: 'public' | 'private' | 'all';
+  ownerType?: 'system' | 'gallery_user';
+  ownerId?: string;
+  isDeleted?: boolean;
+}
+
 // Builder Social Links interface
 export interface BuilderSocialLinks {
   github?: string;

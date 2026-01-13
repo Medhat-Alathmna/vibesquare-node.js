@@ -1,4 +1,5 @@
-import { ProjectQueryOptions, SearchOptions, PaginationResult, SortOption, CreateProjectDTO, UpdateProjectDTO, Builder, BuilderSocialLinks } from '../types';
+import { ProjectQueryOptions, SearchOptions, PaginationResult, SortOption, CreateProjectDTO, UpdateProjectDTO, Builder, BuilderSocialLinks, CollectionQueryOptions } from '../types';
+import { Collection, CreateCollectionDTO, UpdateCollectionDTO, CollectionProject, OwnerType, CollectionActivity } from '../../api/collection/collection.types';
 
 // Project Summary for list view (lightweight)
 export interface ProjectSummary {
@@ -62,20 +63,8 @@ export interface ProjectListResult {
   pagination: PaginationResult;
 }
 
-// Collection types
-export interface CollectionData {
-  id: string;
-  title: string;
-  description: string;
-  thumbnail: string;
-  projectIds: string[];
-  tags: string[];
-  createdAt: Date;
-  featured: boolean;
-}
-
 export interface CollectionsResult {
-  collections: CollectionData[];
+  collections: Collection[];
   pagination: PaginationResult;
 }
 
@@ -93,8 +82,26 @@ export interface IProjectRepository {
 }
 
 export interface ICollectionRepository {
-  findAll(page: number, limit: number): Promise<CollectionsResult>;
-  findById(id: string): Promise<CollectionData | null>;
-  findFeatured(): Promise<CollectionData[]>;
+  findAll(options: CollectionQueryOptions): Promise<CollectionsResult>;
+  findById(id: string): Promise<Collection | null>;
+  findFeatured(): Promise<Collection[]>;
   findProjectsByCollectionId(projectIds: string[]): Promise<ProjectData[]>;
+
+  // New methods
+  create(data: CreateCollectionDTO & { ownerId?: string | null; ownerType?: OwnerType }): Promise<Collection>;
+  update(id: string, data: UpdateCollectionDTO): Promise<Collection | null>;
+  softDelete(id: string): Promise<boolean>;
+  restore(id: string): Promise<boolean>;
+
+  // Project management methods
+  addProject(data: CollectionProject): Promise<void>;
+  removeProject(collectionId: string, projectId: string): Promise<void>;
+  reorderProjects(collectionId: string, projectIds: string[]): Promise<void>;
+  findByOwner(ownerId: string, ownerType: string): Promise<Collection[]>;
+  removeProjectFromAllCollections(projectId: string): Promise<void>;
+  softDeleteAllByOwner(ownerId: string, ownerType: string): Promise<void>;
+
+  // Stat tracking methods
+  incrementStat(collectionId: string, field: 'views' | 'clones' | 'project_clicks'): Promise<void>;
+  trackActivity(activity: Partial<CollectionActivity>): Promise<void>;
 }
