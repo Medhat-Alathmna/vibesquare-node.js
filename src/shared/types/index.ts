@@ -110,3 +110,45 @@ export interface UpdateProjectDTO {
   builder?: Builder;
   builderSocialLinks?: BuilderSocialLinks;
 }
+
+// ============================================
+// Category System Types (New)
+// ============================================
+
+// Category Data Interface
+export interface CategoryData {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  isActive: boolean;
+  deletedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Create Category DTO
+export interface CreateCategoryDTO {
+  name: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+// Update Category DTO
+export interface UpdateCategoryDTO {
+  name?: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+// Categories Result (with pagination)
+export interface CategoriesResult {
+  categories: CategoryData[];
+  pagination: PaginationResult;
+}
+
+// Category Query Options
+export interface CategoryQueryOptions extends QueryOptions {
+  isActive?: boolean;
+  includeDeleted?: boolean;
+}
