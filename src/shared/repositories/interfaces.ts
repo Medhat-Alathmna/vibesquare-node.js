@@ -79,6 +79,26 @@ export interface CollectionsResult {
   pagination: PaginationResult;
 }
 
+// Collection creation data
+export interface CreateCollectionData {
+  title: string;
+  description: string;
+  thumbnail: string;
+  projectIds?: string[];
+  tags?: string[];
+  featured?: boolean;
+}
+
+// Collection update data (all fields optional)
+export interface UpdateCollectionData {
+  title?: string;
+  description?: string;
+  thumbnail?: string;
+  projectIds?: string[];
+  tags?: string[];
+  featured?: boolean;
+}
+
 // Repository interfaces
 export interface IProjectRepository {
   findAll(options: ProjectQueryOptions): Promise<ProjectListResult>;
@@ -97,4 +117,12 @@ export interface ICollectionRepository {
   findById(id: string): Promise<CollectionData | null>;
   findFeatured(): Promise<CollectionData[]>;
   findProjectsByCollectionId(projectIds: string[]): Promise<ProjectData[]>;
+
+  // CRUD operations for admin
+  create(data: CreateCollectionData): Promise<CollectionData>;
+  update(id: string, data: UpdateCollectionData): Promise<CollectionData | null>;
+  delete(id: string): Promise<boolean>;
+
+  // Helper methods
+  existsByTitle(title: string, excludeId?: string): Promise<boolean>;
 }

@@ -32,15 +32,26 @@ export interface ModelCallResult {
 
 // ============ Model Configurations ============
 
+/**
+ * Agent models via OpenRouter - Now using Gemini 3 Flash Preview
+ *
+ * Gemini 3 Flash Preview: High speed, high value thinking model
+ * - 1M token context window
+ * - Multimodal inputs (text, images, audio, video, PDFs)
+ * - Configurable reasoning levels
+ * - Optimal for agentic workflows and multi-turn chat
+ *
+ * For more complex reasoning tasks, Gemini 3 Pro Preview is available.
+ */
 export const AGENT_MODELS = {
-  layoutAnalyzer: 'openai/gpt-4o-mini',
-  componentIdentifier: 'openai/gpt-4o',
-  designSystemExtractor: 'anthropic/claude-3-5-sonnet',
-  interactionAnalyzer: 'google/gemini-2.0-flash-exp',
-  responsiveBehavior: 'openai/gpt-4o-mini',
-  conflictResolver: 'anthropic/claude-3-5-sonnet',
-  promptSynthesizer: 'anthropic/claude-3-5-sonnet',
-  userQuestionCollector: 'openai/gpt-4o-mini',
+  layoutAnalyzer: 'google/gemini-3-flash-preview',
+  componentIdentifier: 'google/gemini-3-flash-preview',
+  designSystemExtractor: 'google/gemini-3-flash-preview',
+  interactionAnalyzer: 'google/gemini-3-flash-preview',
+  responsiveBehavior: 'google/gemini-3-flash-preview',
+  conflictResolver: 'google/gemini-3-flash-preview',
+  promptSynthesizer: 'google/gemini-3-flash-preview',
+  userQuestionCollector: 'google/gemini-3-flash-preview',
 } as const;
 
 export type AgentName = keyof typeof AGENT_MODELS;

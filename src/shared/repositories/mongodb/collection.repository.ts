@@ -1,6 +1,6 @@
 import { Collection } from '../../../api/collection/collection.model';
 import { Project } from '../../../api/project/project.model';
-import { ICollectionRepository, CollectionData, CollectionsResult, ProjectData } from '../interfaces';
+import { ICollectionRepository, CollectionData, CollectionsResult, ProjectData, CreateCollectionData, UpdateCollectionData } from '../interfaces';
 
 export class MongoCollectionRepository implements ICollectionRepository {
   async findAll(page: number = 1, limit: number = 12): Promise<CollectionsResult> {
@@ -51,5 +51,27 @@ export class MongoCollectionRepository implements ICollectionRepository {
       .lean();
 
     return projects as unknown as ProjectData[];
+  }
+
+  // ============================================
+  // Stub implementations for admin operations
+  // These are not used since we're using PostgreSQL
+  // but required to satisfy the interface
+  // ============================================
+
+  async create(data: CreateCollectionData): Promise<CollectionData> {
+    throw new Error('MongoDB implementation not supported. Use PostgreSQL.');
+  }
+
+  async update(id: string, data: UpdateCollectionData): Promise<CollectionData | null> {
+    throw new Error('MongoDB implementation not supported. Use PostgreSQL.');
+  }
+
+  async delete(id: string): Promise<boolean> {
+    throw new Error('MongoDB implementation not supported. Use PostgreSQL.');
+  }
+
+  async existsByTitle(title: string, excludeId?: string): Promise<boolean> {
+    throw new Error('MongoDB implementation not supported. Use PostgreSQL.');
   }
 }

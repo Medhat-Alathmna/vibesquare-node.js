@@ -48,6 +48,17 @@ export interface AgentModelConfig {
     openrouter: string;
 }
 
+/**
+ * All agents now use Gemini 3 models for both providers:
+ * - Gemini: Direct API
+ * - OpenRouter: Gemini 3 Flash via OpenRouter proxy
+ *
+ * Gemini 3 Flash advantages:
+ * - Faster inference speed
+ * - Better reasoning capabilities
+ * - 1M token context window
+ * - Multimodal support
+ */
 export const AGENT_MODEL_CONFIGS: Record<string, AgentModelConfig> = {
     layoutAnalyzer: {
         gemini: GEMINI_MODELS.layoutAnalyzer,
