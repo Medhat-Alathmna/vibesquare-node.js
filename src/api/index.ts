@@ -7,6 +7,7 @@ import { adminRouter } from './admin';
 import { galleryRouter } from './gallery';
 import { uploadRouter } from './upload';
 import { filesRouter } from './files';
+import { categoryRouter } from './category/category.router';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.use('/gallery', galleryRouter);
 // Public/Protected routes
 router.use('/projects', projectRouter);
 router.use('/collections', collectionRouter);
+router.use('/categories', categoryRouter);
 router.use('/analyze', analyzeRouter);
 
 export default router;

@@ -163,6 +163,7 @@ export interface ICategoryRepository {
   // Validation helpers
   existsByName(name: string, excludeId?: string): Promise<boolean>;
   existsBySlug(slug: string, excludeId?: string): Promise<boolean>;
+  isCategoryInUse(id: string): Promise<boolean>;
 
   // Many-to-many relationships for Projects
   addToProject(projectId: string, categoryIds: string[]): Promise<void>;

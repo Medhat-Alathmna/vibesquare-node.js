@@ -230,6 +230,27 @@ export class PostgresCategoryRepository implements ICategoryRepository {
     return this.mapRowToCategory(row);
   }
 
+  /**
+   * Check if category is used in any project or collection
+   */
+  async isCategoryInUse(id: string): Promise<boolean> {
+    const [projectCount, collectionCount] = await Promise.all([
+      this.knex('project_categories')
+        .where({ category_id: id })
+        .count('* as count')
+        .first(),
+      this.knex('collection_categories')
+        .where({ category_id: id })
+        .count('* as count')
+        .first(),
+    ]);
+
+    const pCount = parseInt(projectCount?.count as string || '0', 10);
+    const cCount = parseInt(collectionCount?.count as string || '0', 10);
+
+    return pCount > 0 || cCount > 0;
+  }
+
   // ============================================
   // VALIDATION HELPERS
   // ============================================
