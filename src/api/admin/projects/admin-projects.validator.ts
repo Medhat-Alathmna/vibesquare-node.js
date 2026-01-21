@@ -52,7 +52,14 @@ export const adminProjectsValidator = {
       framework: Joi.string().valid(...FRAMEWORKS).required(),
       tags: Joi.array().items(Joi.string()).optional(),
       styles: Joi.array().items(Joi.string()).optional(),
-      category: Joi.string().valid(...CATEGORIES).required(),
+      category: Joi.string().valid(...CATEGORIES).required(), // Legacy: Keep for backward compatibility
+      categoryIds: Joi.array()
+        .items(Joi.string().uuid())
+        .min(1)
+        .optional()
+        .messages({
+          'array.min': 'At least one category is required'
+        }), // NEW: Array of category UUIDs
       builder: builderSchema.optional(),
       builderSocialLinks: builderSocialLinksSchema.optional()
     })
@@ -75,7 +82,14 @@ export const adminProjectsValidator = {
       framework: Joi.string().valid(...FRAMEWORKS).optional(),
       tags: Joi.array().items(Joi.string()).optional(),
       styles: Joi.array().items(Joi.string()).optional(),
-      category: Joi.string().valid(...CATEGORIES).optional(),
+      category: Joi.string().valid(...CATEGORIES).optional(), // Legacy
+      categoryIds: Joi.array()
+        .items(Joi.string().uuid())
+        .min(1)
+        .optional()
+        .messages({
+          'array.min': 'At least one category is required'
+        }), // NEW: Update project categories
       builder: builderSchema.optional(),
       builderSocialLinks: builderSocialLinksSchema.optional()
     })

@@ -3,7 +3,8 @@ import Joi from 'joi';
 export const listCollections = {
   query: Joi.object({
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(50).default(12)
+    limit: Joi.number().integer().min(1).max(50).default(12),
+    categoryIds: Joi.string() // NEW: Comma-separated category UUIDs (e.g., "uuid1,uuid2,uuid3")
   })
 };
 
@@ -66,6 +67,15 @@ export const createCollection = {
         'array.base': 'Tags must be an array'
       }),
 
+    categoryIds: Joi.array()
+      .items(Joi.string().uuid())
+      .min(1)
+      .optional()
+      .messages({
+        'array.min': 'At least one category is required',
+        'array.base': 'Category IDs must be an array'
+      }),
+
     featured: Joi.boolean()
       .optional()
       .default(false)
@@ -119,6 +129,15 @@ export const updateCollection = {
       .optional()
       .messages({
         'array.base': 'Tags must be an array'
+      }),
+
+    categoryIds: Joi.array()
+      .items(Joi.string().uuid())
+      .min(1)
+      .optional()
+      .messages({
+        'array.min': 'At least one category is required',
+        'array.base': 'Category IDs must be an array'
       }),
 
     featured: Joi.boolean()

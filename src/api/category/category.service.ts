@@ -8,6 +8,8 @@ import {
     CategoriesResult
 } from '../../shared/types';
 import { generateSlug } from '../../shared/utils/slug';
+import { ApiError } from '../../shared/utils/ApiError';
+import httpStatus from 'http-status';
 
 export class CategoryService {
     private categoryRepository: ICategoryRepository;
@@ -24,12 +26,12 @@ export class CategoryService {
         // Check if name exists
         const exists = await this.categoryRepository.existsByName(data.name);
         if (exists) {
-            throw new Error(`Category with name "${data.name}" already exists`);
+            throw new ApiError(
+                httpStatus.CONFLICT,
+                `Category with name "${data.name}" already exists`
+            );
         }
 
-        // Pass data to repository (Repository handles slug generation, but we can double check logic matches)
-        // Actually, the repository generates the slug inside create() method based on the code I reviewed.
-        // So we just pass the DTO.
         return this.categoryRepository.create(data);
     }
 
@@ -46,7 +48,7 @@ export class CategoryService {
     async getCategoryById(id: string): Promise<CategoryData> {
         const category = await this.categoryRepository.findById(id);
         if (!category) {
-            throw new Error(`Category not found`);
+            throw new ApiError(httpStatus.NOT_FOUND, 'Category not found');
         }
         return category;
     }
@@ -57,32 +59,38 @@ export class CategoryService {
     async getCategoryBySlug(slug: string): Promise<CategoryData> {
         const category = await this.categoryRepository.findBySlug(slug);
         if (!category) {
-            throw new Error(`Category not found`);
+            throw new ApiError(httpStatus.NOT_FOUND, 'Category not found');
         }
         return category;
     }
 
     /**
      * Update category
-      * Checks for name uniqueness if name is changed
+     * Checks for name uniqueness if name is changed
      */
     async updateCategory(id: string, data: UpdateCategoryDTO): Promise<CategoryData> {
         const category = await this.categoryRepository.findById(id);
         if (!category) {
-            throw new Error(`Category not found`);
+            throw new ApiError(httpStatus.NOT_FOUND, 'Category not found');
         }
 
         // Check name uniqueness if updating name
         if (data.name && data.name.toLowerCase() !== category.name.toLowerCase()) {
             const exists = await this.categoryRepository.existsByName(data.name, id);
             if (exists) {
-                throw new Error(`Category with name "${data.name}" already exists`);
+                throw new ApiError(
+                    httpStatus.CONFLICT,
+                    `Category with name "${data.name}" already exists`
+                );
             }
         }
 
         const updated = await this.categoryRepository.update(id, data);
         if (!updated) {
-            throw new Error(`Failed to update category`);
+            throw new ApiError(
+                httpStatus.INTERNAL_SERVER_ERROR,
+                'Failed to update category'
+            );
         }
         return updated;
     }
@@ -94,13 +102,16 @@ export class CategoryService {
     async deleteCategory(id: string): Promise<boolean> {
         const category = await this.categoryRepository.findById(id);
         if (!category) {
-            throw new Error(`Category not found`);
+            throw new ApiError(httpStatus.NOT_FOUND, 'Category not found');
         }
 
         // Check usage
         const inUse = await this.categoryRepository.isCategoryInUse(id);
         if (inUse) {
-            throw new Error(`Cannot delete category because it is used in projects or collections`);
+            throw new ApiError(
+                httpStatus.BAD_REQUEST,
+                'Cannot delete category because it is used in projects or collections'
+            );
         }
 
         return this.categoryRepository.softDelete(id);
@@ -112,7 +123,10 @@ export class CategoryService {
     async restoreCategory(id: string): Promise<CategoryData> {
         const category = await this.categoryRepository.restore(id);
         if (!category) {
-            throw new Error(`Category not found or not deleted`);
+            throw new ApiError(
+                httpStatus.NOT_FOUND,
+                'Category not found or not deleted'
+            );
         }
         return category;
     }

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getKnex } from '../../../config/knex';
 import { IProjectRepository, ProjectData, ProjectListResult, ProjectSummary } from '../interfaces';
 import { ProjectQueryOptions, SearchOptions, SortOption, CreateProjectDTO, UpdateProjectDTO } from '../../types';
+import { getCategoryRepository } from '../index';
 
 export class PostgresProjectRepository implements IProjectRepository {
   private get db() {
@@ -68,35 +69,49 @@ export class PostgresProjectRepository implements IProjectRepository {
   }
 
   async findAll(options: ProjectQueryOptions): Promise<ProjectListResult> {
-    const { page = 1, limit = 12, framework, category, tags, sortBy = 'recent' } = options;
+    const { page = 1, limit = 12, framework, category, categoryIds, tags, sortBy = 'recent' } = options;
     const offset = (page - 1) * limit;
 
     // بناء الاستعلام بشكل ديناميكي
     let query = this.db('projects');
     let countQuery = this.db('projects');
 
+    // NEW: Filter by categoryIds (many-to-many relationship)
+    if (categoryIds && categoryIds.length > 0) {
+      query = query
+        .join('project_categories', 'projects.id', 'project_categories.project_id')
+        .whereIn('project_categories.category_id', categoryIds)
+        .groupBy('projects.id');
+
+      countQuery = countQuery
+        .join('project_categories', 'projects.id', 'project_categories.project_id')
+        .whereIn('project_categories.category_id', categoryIds)
+        .groupBy('projects.id');
+    }
+
     if (framework) {
-      query = query.where({ framework });
-      countQuery = countQuery.where({ framework });
+      query = query.where({ 'projects.framework': framework });
+      countQuery = countQuery.where({ 'projects.framework': framework });
     }
     if (category) {
-      query = query.where({ category });
-      countQuery = countQuery.where({ category });
+      query = query.where({ 'projects.category': category });
+      countQuery = countQuery.where({ 'projects.category': category });
     }
     if (tags && tags.length > 0) {
-      query = query.whereRaw('tags ?| ?', [tags]);
-      countQuery = countQuery.whereRaw('tags ?| ?', [tags]);
+      query = query.whereRaw('projects.tags ?| ?', [tags]);
+      countQuery = countQuery.whereRaw('projects.tags ?| ?', [tags]);
     }
 
     const sortColumn = this.getSortColumn(sortBy);
 
     // تنفيذ الاستعلامات
     const [countResult, projects] = await Promise.all([
-      countQuery.count('* as count').first(),
+      countQuery.count('projects.id as count').first(),
       query
         .select(
-          'id', 'title', 'short_description', 'thumbnail', 'framework', 'category',
-          'tags', 'likes', 'views', 'downloads', 'created_at', 'builder'
+          'projects.id', 'projects.title', 'projects.short_description', 'projects.thumbnail',
+          'projects.framework', 'projects.category', 'projects.tags', 'projects.likes',
+          'projects.views', 'projects.downloads', 'projects.created_at', 'projects.builder'
         )
         .orderByRaw(sortColumn)
         .limit(limit)
@@ -118,45 +133,59 @@ export class PostgresProjectRepository implements IProjectRepository {
   }
 
   async search(options: SearchOptions): Promise<ProjectListResult> {
-    const { query, frameworks, categories, tags, sortBy = 'recent', page = 1, limit = 12 } = options;
+    const { query, frameworks, categories, categoryIds, tags, sortBy = 'recent', page = 1, limit = 12 } = options;
     const offset = (page - 1) * limit;
 
     // بناء الاستعلام بشكل ديناميكي
     let dbQuery = this.db('projects');
     let countQuery = this.db('projects');
 
+    // NEW: Filter by categoryIds (many-to-many relationship)
+    if (categoryIds && categoryIds.length > 0) {
+      dbQuery = dbQuery
+        .join('project_categories', 'projects.id', 'project_categories.project_id')
+        .whereIn('project_categories.category_id', categoryIds)
+        .groupBy('projects.id');
+
+      countQuery = countQuery
+        .join('project_categories', 'projects.id', 'project_categories.project_id')
+        .whereIn('project_categories.category_id', categoryIds)
+        .groupBy('projects.id');
+    }
+
     if (query) {
       dbQuery = dbQuery.where(function () {
-        this.where('title', 'ilike', `%${query}%`)
-          .orWhere('short_description', 'ilike', `%${query}%`);
+        this.where('projects.title', 'ilike', `%${query}%`)
+          .orWhere('projects.short_description', 'ilike', `%${query}%`);
       });
       countQuery = countQuery.where(function () {
-        this.where('title', 'ilike', `%${query}%`)
-          .orWhere('short_description', 'ilike', `%${query}%`);
+        this.where('projects.title', 'ilike', `%${query}%`)
+          .orWhere('projects.short_description', 'ilike', `%${query}%`);
       });
     }
     if (frameworks && frameworks.length > 0) {
-      dbQuery = dbQuery.whereIn('framework', frameworks);
-      countQuery = countQuery.whereIn('framework', frameworks);
+      dbQuery = dbQuery.whereIn('projects.framework', frameworks);
+      countQuery = countQuery.whereIn('projects.framework', frameworks);
     }
     if (categories && categories.length > 0) {
-      dbQuery = dbQuery.whereIn('category', categories);
-      countQuery = countQuery.whereIn('category', categories);
+      dbQuery = dbQuery.whereIn('projects.category', categories);
+      countQuery = countQuery.whereIn('projects.category', categories);
     }
     if (tags && tags.length > 0) {
-      dbQuery = dbQuery.whereRaw('tags ?| ?', [tags]);
-      countQuery = countQuery.whereRaw('tags ?| ?', [tags]);
+      dbQuery = dbQuery.whereRaw('projects.tags ?| ?', [tags]);
+      countQuery = countQuery.whereRaw('projects.tags ?| ?', [tags]);
     }
 
     const sortColumn = this.getSortColumn(sortBy);
 
     // تنفيذ الاستعلامات
     const [countResult, projects] = await Promise.all([
-      countQuery.count('* as count').first(),
+      countQuery.count('projects.id as count').first(),
       dbQuery
         .select(
-          'id', 'title', 'short_description', 'thumbnail', 'framework', 'category',
-          'tags', 'likes', 'views', 'downloads', 'created_at', 'builder'
+          'projects.id', 'projects.title', 'projects.short_description', 'projects.thumbnail',
+          'projects.framework', 'projects.category', 'projects.tags', 'projects.likes',
+          'projects.views', 'projects.downloads', 'projects.created_at', 'projects.builder'
         )
         .orderByRaw(sortColumn)
         .limit(limit)
@@ -186,7 +215,14 @@ export class PostgresProjectRepository implements IProjectRepository {
       return null;
     }
 
-    return this.mapRowToProject(project);
+    // NEW: Fetch and include categories
+    const categoryRepo = getCategoryRepository();
+    const categories = await categoryRepo.getProjectCategories(id);
+
+    return {
+      ...this.mapRowToProject(project),
+      categories
+    };
   }
 
   async findByIds(ids: string[]): Promise<ProjectSummary[]> {

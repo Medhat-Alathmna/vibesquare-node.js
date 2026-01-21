@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import httpStatus from 'http-status';
 import { categoryService } from './category.service';
-import { ApiError } from '../../shared/utils/ApiError';
 import { CategoryQueryOptions } from '../../shared/types';
 
 export class CategoryController {
@@ -24,16 +23,12 @@ export class CategoryController {
      */
     async list(req: Request, res: Response, next: NextFunction) {
         try {
-            const page = parseInt(req.query.page as string) || 1;
-            const limit = parseInt(req.query.limit as string) || 20;
-            const isActive = req.query.isActive !== undefined ? req.query.isActive === 'true' : undefined;
-            const includeDeleted = req.query.includeDeleted === 'true';
-
+            // Validator already converted types and applied defaults
             const options: CategoryQueryOptions = {
-                page,
-                limit,
-                isActive,
-                includeDeleted
+                page: req.query.page as unknown as number,
+                limit: req.query.limit as unknown as number,
+                isActive: req.query.isActive as unknown as boolean | undefined,
+                includeDeleted: req.query.includeDeleted as unknown as boolean
             };
 
             const result = await categoryService.getCategories(options);

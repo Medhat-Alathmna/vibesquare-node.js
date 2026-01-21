@@ -1,6 +1,7 @@
 import { getKnex } from '../../../config/knex';
 import { ICollectionRepository, CollectionData, CollectionsResult, ProjectData, CreateCollectionData, UpdateCollectionData } from '../interfaces';
 import { v4 as uuidv4 } from 'uuid';
+import { getCategoryRepository } from '../index';
 
 export class PostgresCollectionRepository implements ICollectionRepository {
   private get db() {
@@ -45,16 +46,32 @@ export class PostgresCollectionRepository implements ICollectionRepository {
     };
   }
 
-  async findAll(page: number = 1, limit: number = 12): Promise<CollectionsResult> {
+  async findAll(page: number = 1, limit: number = 12, categoryIds?: string[]): Promise<CollectionsResult> {
     const offset = (page - 1) * limit;
 
+    let query = this.db('collections');
+    let countQuery = this.db('collections');
+
+    // NEW: Filter by categoryIds (many-to-many relationship)
+    if (categoryIds && categoryIds.length > 0) {
+      query = query
+        .join('collection_categories', 'collections.id', 'collection_categories.collection_id')
+        .whereIn('collection_categories.category_id', categoryIds)
+        .groupBy('collections.id');
+
+      countQuery = countQuery
+        .join('collection_categories', 'collections.id', 'collection_categories.collection_id')
+        .whereIn('collection_categories.category_id', categoryIds)
+        .groupBy('collections.id');
+    }
+
     const [countResult, collections] = await Promise.all([
-      this.db('collections').count('* as count').first(),
-      this.db('collections')
-        .select('*')
+      countQuery.count('collections.id as count').first(),
+      query
+        .select('collections.*')
         .orderBy([
-          { column: 'featured', order: 'desc' },
-          { column: 'created_at', order: 'desc' }
+          { column: 'collections.featured', order: 'desc' },
+          { column: 'collections.created_at', order: 'desc' }
         ])
         .limit(limit)
         .offset(offset)
@@ -83,7 +100,14 @@ export class PostgresCollectionRepository implements ICollectionRepository {
       return null;
     }
 
-    return this.mapRowToCollection(collection);
+    // NEW: Fetch and include categories
+    const categoryRepo = getCategoryRepository();
+    const categories = await categoryRepo.getCollectionCategories(id);
+
+    return {
+      ...this.mapRowToCollection(collection),
+      categories
+    };
   }
 
   async findFeatured(): Promise<CollectionData[]> {

@@ -4,11 +4,12 @@ import { asyncHandler } from '../../shared/utils/asyncHandler';
 import { ApiResponse } from '../../shared/utils/ApiResponse';
 
 export const getCollections = asyncHandler(async (req: Request, res: Response) => {
-  const { page = 1, limit = 12 } = req.query;
+  const { page = 1, limit = 12, categoryIds } = req.query;
 
   const result = await collectionService.getCollections(
     Number(page),
-    Number(limit)
+    Number(limit),
+    categoryIds ? (categoryIds as string).split(',') : undefined
   );
 
   res.json(new ApiResponse(200, result, 'Collections retrieved successfully'));

@@ -102,6 +102,7 @@ export interface CreateCollectionData {
   thumbnail: string;
   projectIds?: string[];
   tags?: string[];
+  categoryIds?: string[]; // NEW: Array of category IDs (at least 1 required in validation)
   featured?: boolean;
 }
 
@@ -112,6 +113,7 @@ export interface UpdateCollectionData {
   thumbnail?: string;
   projectIds?: string[];
   tags?: string[];
+  categoryIds?: string[]; // NEW: Update collection categories
   featured?: boolean;
 }
 
@@ -129,7 +131,7 @@ export interface IProjectRepository {
 }
 
 export interface ICollectionRepository {
-  findAll(page: number, limit: number): Promise<CollectionsResult>;
+  findAll(page: number, limit: number, categoryIds?: string[]): Promise<CollectionsResult>;
   findById(id: string): Promise<CollectionData | null>;
   findFeatured(): Promise<CollectionData[]>;
   findProjectsByCollectionId(projectIds: string[]): Promise<ProjectData[]>;

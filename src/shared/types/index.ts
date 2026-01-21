@@ -48,14 +48,16 @@ export interface QueryOptions {
 
 export interface ProjectQueryOptions extends QueryOptions {
   framework?: Framework;
-  category?: Category;
+  category?: Category; // Legacy: Keep for backward compatibility
+  categoryIds?: string[]; // NEW: Filter by multiple category IDs
   tags?: string[];
 }
 
 export interface SearchOptions extends ProjectQueryOptions {
   query?: string;
   frameworks?: Framework[];
-  categories?: Category[];
+  categories?: Category[]; // Legacy
+  categoryIds?: string[]; // NEW: Filter by multiple category IDs
 }
 
 // Builder Social Links interface
@@ -87,7 +89,8 @@ export interface CreateProjectDTO {
   framework: Framework;
   tags?: string[];
   styles?: string[];
-  category: Category;
+  category: Category; // Legacy: Keep for backward compatibility
+  categoryIds?: string[]; // NEW: Array of category IDs (at least 1 required in validation)
   builder?: Builder;
   builderSocialLinks?: BuilderSocialLinks;
 }
@@ -106,7 +109,8 @@ export interface UpdateProjectDTO {
   framework?: Framework;
   tags?: string[];
   styles?: string[];
-  category?: Category;
+  category?: Category; // Legacy
+  categoryIds?: string[]; // NEW: Update project categories
   builder?: Builder;
   builderSocialLinks?: BuilderSocialLinks;
 }

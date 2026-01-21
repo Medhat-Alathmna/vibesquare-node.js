@@ -3,9 +3,11 @@ import { Project } from '../../../api/project/project.model';
 import { ICollectionRepository, CollectionData, CollectionsResult, ProjectData, CreateCollectionData, UpdateCollectionData } from '../interfaces';
 
 export class MongoCollectionRepository implements ICollectionRepository {
-  async findAll(page: number = 1, limit: number = 12): Promise<CollectionsResult> {
+  async findAll(page: number = 1, limit: number = 12, categoryIds?: string[]): Promise<CollectionsResult> {
     const skip = (page - 1) * limit;
 
+    // Note: categoryIds filtering not fully implemented for MongoDB
+    // Use PostgreSQL for production
     const [collections, total] = await Promise.all([
       Collection.find()
         .sort({ featured: -1, createdAt: -1 })

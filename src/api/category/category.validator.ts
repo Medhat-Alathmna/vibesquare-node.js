@@ -33,3 +33,16 @@ export const categoryIdParam = {
         id: Joi.string().uuid().required()
     })
 };
+
+export const categorySlugParam = {
+    params: Joi.object({
+        slug: Joi.string()
+            .min(2)
+            .max(100)
+            .pattern(/^[a-z0-9-]+$/)
+            .required()
+            .messages({
+                'string.pattern.base': 'Slug must contain only lowercase letters, numbers, and hyphens'
+            })
+    })
+};

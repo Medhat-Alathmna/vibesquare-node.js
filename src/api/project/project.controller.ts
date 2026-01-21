@@ -46,13 +46,14 @@ async function addHasLikedToProject(
 }
 
 export const getProjects = asyncHandler(async (req: Request, res: Response) => {
-  const { page = 1, limit = 12, framework, category, tags, sortBy = 'recent' } = req.query;
+  const { page = 1, limit = 12, framework, category, categoryIds, tags, sortBy = 'recent' } = req.query;
 
   const result = await projectService.getProjects({
     page: Number(page),
     limit: Number(limit),
     framework: framework as Framework,
     category: category as Category,
+    categoryIds: categoryIds ? (categoryIds as string).split(',') : undefined,
     tags: tags ? (tags as string).split(',') : undefined,
     sortBy: sortBy as SortOption
   });
@@ -70,12 +71,13 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const searchProjects = asyncHandler(async (req: Request, res: Response) => {
-  const { q, frameworks, categories, tags, sortBy = 'recent', page = 1, limit = 12 } = req.query;
+  const { q, frameworks, categories, categoryIds, tags, sortBy = 'recent', page = 1, limit = 12 } = req.query;
 
   const result = await projectService.searchProjects({
     query: q as string,
     frameworks: frameworks ? (frameworks as string).split(',') as Framework[] : undefined,
     categories: categories ? (categories as string).split(',') as Category[] : undefined,
+    categoryIds: categoryIds ? (categoryIds as string).split(',') : undefined,
     tags: tags ? (tags as string).split(',') : undefined,
     sortBy: sortBy as SortOption,
     page: Number(page),
