@@ -18,7 +18,6 @@ export class PostgresProjectRepository implements IProjectRepository {
       thumbnail: row.thumbnail,
       framework: row.framework,
       category: row.category,
-      tags: row.tags || [],
       likes: row.likes || 0,
       views: row.views || 0,
       downloads: row.downloads || 0,
@@ -44,7 +43,6 @@ export class PostgresProjectRepository implements IProjectRepository {
       sourceCodeFile: row.source_code_file,
       prompt: row.prompt || {},
       framework: row.framework,
-      tags: row.tags || [],
       styles: row.styles || [],
       category: row.category,
       likes: row.likes || 0,
@@ -69,7 +67,7 @@ export class PostgresProjectRepository implements IProjectRepository {
   }
 
   async findAll(options: ProjectQueryOptions): Promise<ProjectListResult> {
-    const { page = 1, limit = 12, framework, category, categoryIds, tags, sortBy = 'recent' } = options;
+    const { page = 1, limit = 12, framework, category, categoryIds, sortBy = 'recent' } = options;
     const offset = (page - 1) * limit;
 
     // بناء الاستعلام بشكل ديناميكي
@@ -97,10 +95,6 @@ export class PostgresProjectRepository implements IProjectRepository {
       query = query.where({ 'projects.category': category });
       countQuery = countQuery.where({ 'projects.category': category });
     }
-    if (tags && tags.length > 0) {
-      query = query.whereRaw('projects.tags ?| ?', [tags]);
-      countQuery = countQuery.whereRaw('projects.tags ?| ?', [tags]);
-    }
 
     const sortColumn = this.getSortColumn(sortBy);
 
@@ -110,7 +104,7 @@ export class PostgresProjectRepository implements IProjectRepository {
       query
         .select(
           'projects.id', 'projects.title', 'projects.short_description', 'projects.thumbnail',
-          'projects.framework', 'projects.category', 'projects.tags', 'projects.likes',
+          'projects.framework', 'projects.category', 'projects.likes',
           'projects.views', 'projects.downloads', 'projects.created_at', 'projects.builder'
         )
         .orderByRaw(sortColumn)
@@ -133,7 +127,7 @@ export class PostgresProjectRepository implements IProjectRepository {
   }
 
   async search(options: SearchOptions): Promise<ProjectListResult> {
-    const { query, frameworks, categories, categoryIds, tags, sortBy = 'recent', page = 1, limit = 12 } = options;
+    const { query, frameworks, categories, categoryIds, sortBy = 'recent', page = 1, limit = 12 } = options;
     const offset = (page - 1) * limit;
 
     // بناء الاستعلام بشكل ديناميكي
@@ -171,10 +165,6 @@ export class PostgresProjectRepository implements IProjectRepository {
       dbQuery = dbQuery.whereIn('projects.category', categories);
       countQuery = countQuery.whereIn('projects.category', categories);
     }
-    if (tags && tags.length > 0) {
-      dbQuery = dbQuery.whereRaw('projects.tags ?| ?', [tags]);
-      countQuery = countQuery.whereRaw('projects.tags ?| ?', [tags]);
-    }
 
     const sortColumn = this.getSortColumn(sortBy);
 
@@ -184,7 +174,7 @@ export class PostgresProjectRepository implements IProjectRepository {
       dbQuery
         .select(
           'projects.id', 'projects.title', 'projects.short_description', 'projects.thumbnail',
-          'projects.framework', 'projects.category', 'projects.tags', 'projects.likes',
+          'projects.framework', 'projects.category', 'projects.likes',
           'projects.views', 'projects.downloads', 'projects.created_at', 'projects.builder'
         )
         .orderByRaw(sortColumn)
@@ -231,7 +221,7 @@ export class PostgresProjectRepository implements IProjectRepository {
     const projects = await this.db('projects')
       .select(
         'id', 'title', 'short_description', 'thumbnail', 'framework', 'category',
-        'tags', 'likes', 'views', 'downloads', 'created_at', 'builder'
+        'likes', 'views', 'downloads', 'created_at', 'builder'
       )
       .whereIn('id', ids);
 
@@ -286,7 +276,6 @@ export class PostgresProjectRepository implements IProjectRepository {
         source_code_file: data.sourceCodeFile || null,
         prompt: JSON.stringify(data.prompt),
         framework: data.framework,
-        tags: JSON.stringify(data.tags || []),
         styles: JSON.stringify(data.styles || []),
         category: data.category,
         builder: data.builder ? JSON.stringify(data.builder) : null,
@@ -332,9 +321,6 @@ export class PostgresProjectRepository implements IProjectRepository {
     }
     if (data.framework !== undefined) {
       updateData.framework = data.framework;
-    }
-    if (data.tags !== undefined) {
-      updateData.tags = JSON.stringify(data.tags);
     }
     if (data.styles !== undefined) {
       updateData.styles = JSON.stringify(data.styles);

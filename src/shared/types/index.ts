@@ -50,7 +50,6 @@ export interface ProjectQueryOptions extends QueryOptions {
   framework?: Framework;
   category?: Category; // Legacy: Keep for backward compatibility
   categoryIds?: string[]; // NEW: Filter by multiple category IDs
-  tags?: string[];
 }
 
 export interface SearchOptions extends ProjectQueryOptions {
@@ -87,7 +86,6 @@ export interface CreateProjectDTO {
   sourceCodeFile?: string;
   prompt: Prompt;
   framework: Framework;
-  tags?: string[];
   styles?: string[];
   category: Category; // Legacy: Keep for backward compatibility
   categoryIds?: string[]; // NEW: Array of category IDs (at least 1 required in validation)
@@ -107,7 +105,6 @@ export interface UpdateProjectDTO {
   sourceCodeFile?: string;
   prompt?: Prompt;
   framework?: Framework;
-  tags?: string[];
   styles?: string[];
   category?: Category; // Legacy
   categoryIds?: string[]; // NEW: Update project categories

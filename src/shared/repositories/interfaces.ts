@@ -22,7 +22,6 @@ export interface ProjectSummary {
   thumbnail: string;
   framework: string;
   category: string;
-  tags: string[];
   likes: number;
   views: number;
   downloads: number;
@@ -52,7 +51,6 @@ export interface ProjectData {
     parameters?: any;
   };
   framework: string;
-  tags: string[];
   styles: string[];
   category: string; // Legacy: Keep for backward compatibility
   categories?: CategoryData[]; // NEW: Array of category objects
