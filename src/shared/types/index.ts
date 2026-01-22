@@ -155,4 +155,5 @@ export interface CategoriesResult {
 export interface CategoryQueryOptions extends QueryOptions {
   isActive?: boolean;
   includeDeleted?: boolean;
+  includeUsageStats?: boolean;
 }

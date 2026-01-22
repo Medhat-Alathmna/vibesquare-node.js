@@ -5,7 +5,8 @@ export const listCategories = {
         page: Joi.number().integer().min(1).default(1),
         limit: Joi.number().integer().min(1).max(100).default(20),
         isActive: Joi.boolean(),
-        includeDeleted: Joi.boolean().default(false)
+        includeDeleted: Joi.boolean().default(false),
+        includeUsageStats: Joi.boolean().default(false)
     })
 };
 

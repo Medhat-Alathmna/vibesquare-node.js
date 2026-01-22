@@ -62,7 +62,7 @@ router.post(
     '/',
     authenticate(),
     requireAdminAccess(),
-    requirePermission('categories.create'),
+    requirePermission('category.create'),
     validate(createCategory),
     categoryController.create
 );
@@ -76,7 +76,7 @@ router.put(
     '/:id',
     authenticate(),
     requireAdminAccess(),
-    requirePermission('categories.update'),
+    requirePermission('category.update'),
     validate(updateCategory),
     categoryController.update
 );
@@ -90,7 +90,7 @@ router.delete(
     '/:id',
     authenticate(),
     requireAdminAccess(),
-    requirePermission('categories.delete'),
+    requirePermission('category.delete'),
     validate(categoryIdParam),
     categoryController.delete
 );
@@ -104,7 +104,7 @@ router.post(
     '/:id/restore',
     authenticate(),
     requireAdminAccess(),
-    requirePermission('categories.restore'),
+    requirePermission('category.restore'),
     validate(categoryIdParam),
     categoryController.restore
 );
