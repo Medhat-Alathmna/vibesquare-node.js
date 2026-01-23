@@ -1,4 +1,18 @@
-import { ProjectQueryOptions, SearchOptions, PaginationResult, SortOption, CreateProjectDTO, UpdateProjectDTO, Builder, BuilderSocialLinks } from '../types';
+import {
+  ProjectQueryOptions,
+  SearchOptions,
+  PaginationResult,
+  SortOption,
+  CreateProjectDTO,
+  UpdateProjectDTO,
+  Builder,
+  BuilderSocialLinks,
+  CategoryData,
+  CreateCategoryDTO,
+  UpdateCategoryDTO,
+  CategoriesResult,
+  CategoryQueryOptions
+} from '../types';
 
 // Project Summary for list view (lightweight)
 export interface ProjectSummary {
@@ -8,7 +22,6 @@ export interface ProjectSummary {
   thumbnail: string;
   framework: string;
   category: string;
-  tags: string[];
   likes: number;
   views: number;
   downloads: number;
@@ -38,9 +51,9 @@ export interface ProjectData {
     parameters?: any;
   };
   framework: string;
-  tags: string[];
   styles: string[];
-  category: string;
+  category: string; // Legacy: Keep for backward compatibility
+  categories?: CategoryData[]; // NEW: Array of category objects
   likes: number;
   views: number;
   downloads: number;
@@ -69,7 +82,7 @@ export interface CollectionData {
   description: string;
   thumbnail: string;
   projectIds: string[];
-  tags: string[];
+  categories?: CategoryData[]; // NEW: Array of category objects
   createdAt: Date;
   featured: boolean;
 }
@@ -85,7 +98,7 @@ export interface CreateCollectionData {
   description: string;
   thumbnail: string;
   projectIds?: string[];
-  tags?: string[];
+  categoryIds?: string[]; // NEW: Array of category IDs (at least 1 required in validation)
   featured?: boolean;
 }
 
@@ -95,7 +108,7 @@ export interface UpdateCollectionData {
   description?: string;
   thumbnail?: string;
   projectIds?: string[];
-  tags?: string[];
+  categoryIds?: string[]; // NEW: Update collection categories
   featured?: boolean;
 }
 
@@ -113,7 +126,7 @@ export interface IProjectRepository {
 }
 
 export interface ICollectionRepository {
-  findAll(page: number, limit: number): Promise<CollectionsResult>;
+  findAll(page: number, limit: number, categoryIds?: string[]): Promise<CollectionsResult>;
   findById(id: string): Promise<CollectionData | null>;
   findFeatured(): Promise<CollectionData[]>;
   findProjectsByCollectionId(projectIds: string[]): Promise<ProjectData[]>;
@@ -125,4 +138,37 @@ export interface ICollectionRepository {
 
   // Helper methods
   existsByTitle(title: string, excludeId?: string): Promise<boolean>;
+}
+
+// ============================================
+// Category Repository Interface (New)
+// ============================================
+
+export interface ICategoryRepository {
+  // Read operations
+  findAll(options: CategoryQueryOptions): Promise<CategoriesResult>;
+  findById(id: string): Promise<CategoryData | null>;
+  findBySlug(slug: string): Promise<CategoryData | null>;
+  findByIds(ids: string[]): Promise<CategoryData[]>;
+
+  // CRUD operations
+  create(data: CreateCategoryDTO): Promise<CategoryData>;
+  update(id: string, data: UpdateCategoryDTO): Promise<CategoryData | null>;
+  softDelete(id: string): Promise<boolean>;
+  restore(id: string): Promise<CategoryData | null>;
+
+  // Validation helpers
+  existsByName(name: string, excludeId?: string): Promise<boolean>;
+  existsBySlug(slug: string, excludeId?: string): Promise<boolean>;
+  isCategoryInUse(id: string): Promise<boolean>;
+
+  // Many-to-many relationships for Projects
+  addToProject(projectId: string, categoryIds: string[]): Promise<void>;
+  removeFromProject(projectId: string, categoryIds: string[]): Promise<void>;
+  getProjectCategories(projectId: string): Promise<CategoryData[]>;
+
+  // Many-to-many relationships for Collections
+  addToCollection(collectionId: string, categoryIds: string[]): Promise<void>;
+  removeFromCollection(collectionId: string, categoryIds: string[]): Promise<void>;
+  getCollectionCategories(collectionId: string): Promise<CategoryData[]>;
 }

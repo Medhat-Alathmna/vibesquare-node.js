@@ -1,8 +1,13 @@
-import { pgPool } from '../../../config/database';
+import { getKnex } from '../../../config/knex';
 import { ICollectionRepository, CollectionData, CollectionsResult, ProjectData, CreateCollectionData, UpdateCollectionData } from '../interfaces';
 import { v4 as uuidv4 } from 'uuid';
+import { getCategoryRepository } from '../index';
 
 export class PostgresCollectionRepository implements ICollectionRepository {
+  private get db() {
+    return getKnex();
+  }
+
   private mapRowToCollection(row: any): CollectionData {
     return {
       id: row.id,
@@ -10,7 +15,6 @@ export class PostgresCollectionRepository implements ICollectionRepository {
       description: row.description,
       thumbnail: row.thumbnail,
       projectIds: row.project_ids || [],
-      tags: row.tags || [],
       createdAt: row.created_at,
       featured: row.featured || false
     };
@@ -29,7 +33,6 @@ export class PostgresCollectionRepository implements ICollectionRepository {
       sourceCodeFile: row.source_code_file,
       prompt: row.prompt || {},
       framework: row.framework,
-      tags: row.tags || [],
       styles: row.styles || [],
       category: row.category,
       likes: row.likes || 0,
@@ -41,21 +44,41 @@ export class PostgresCollectionRepository implements ICollectionRepository {
     };
   }
 
-  async findAll(page: number = 1, limit: number = 12): Promise<CollectionsResult> {
+  async findAll(page: number = 1, limit: number = 12, categoryIds?: string[]): Promise<CollectionsResult> {
     const offset = (page - 1) * limit;
 
-    const [countResult, dataResult] = await Promise.all([
-      pgPool.query('SELECT COUNT(*) FROM collections'),
-      pgPool.query(
-        `SELECT * FROM collections ORDER BY featured DESC, created_at DESC LIMIT $1 OFFSET $2`,
-        [limit, offset]
-      )
+    let query = this.db('collections');
+    let countQuery = this.db('collections');
+
+    // NEW: Filter by categoryIds (many-to-many relationship)
+    if (categoryIds && categoryIds.length > 0) {
+      query = query
+        .join('collection_categories', 'collections.id', 'collection_categories.collection_id')
+        .whereIn('collection_categories.category_id', categoryIds)
+        .groupBy('collections.id');
+
+      countQuery = countQuery
+        .join('collection_categories', 'collections.id', 'collection_categories.collection_id')
+        .whereIn('collection_categories.category_id', categoryIds)
+        .groupBy('collections.id');
+    }
+
+    const [countResult, collections] = await Promise.all([
+      countQuery.count('collections.id as count').first(),
+      query
+        .select('collections.*')
+        .orderBy([
+          { column: 'collections.featured', order: 'desc' },
+          { column: 'collections.created_at', order: 'desc' }
+        ])
+        .limit(limit)
+        .offset(offset)
     ]);
 
-    const total = parseInt(countResult.rows[0].count, 10);
+    const total = parseInt(String(countResult?.count || 0), 10);
 
     return {
-      collections: dataResult.rows.map(row => this.mapRowToCollection(row)),
+      collections: collections.map((row: any) => this.mapRowToCollection(row)),
       pagination: {
         page,
         limit,
@@ -67,24 +90,31 @@ export class PostgresCollectionRepository implements ICollectionRepository {
   }
 
   async findById(id: string): Promise<CollectionData | null> {
-    const result = await pgPool.query(
-      'SELECT * FROM collections WHERE id = $1',
-      [id]
-    );
+    const collection = await this.db('collections')
+      .where({ id })
+      .first();
 
-    if (result.rows.length === 0) {
+    if (!collection) {
       return null;
     }
 
-    return this.mapRowToCollection(result.rows[0]);
+    // NEW: Fetch and include categories
+    const categoryRepo = getCategoryRepository();
+    const categories = await categoryRepo.getCollectionCategories(id);
+
+    return {
+      ...this.mapRowToCollection(collection),
+      categories
+    };
   }
 
   async findFeatured(): Promise<CollectionData[]> {
-    const result = await pgPool.query(
-      'SELECT * FROM collections WHERE featured = true ORDER BY created_at DESC LIMIT 6'
-    );
+    const collections = await this.db('collections')
+      .where({ featured: true })
+      .orderBy('created_at', 'desc')
+      .limit(6);
 
-    return result.rows.map(row => this.mapRowToCollection(row));
+    return collections.map((row: any) => this.mapRowToCollection(row));
   }
 
   async findProjectsByCollectionId(projectIds: string[]): Promise<ProjectData[]> {
@@ -92,15 +122,16 @@ export class PostgresCollectionRepository implements ICollectionRepository {
       return [];
     }
 
-    const result = await pgPool.query(
-      `SELECT id, title, description, short_description, thumbnail, screenshots,
-              demo_url, download_url, source_code_file, prompt, framework, tags, styles, category,
-              likes, views, downloads, collection_ids, created_at, updated_at
-       FROM projects WHERE id = ANY($1)`,
-      [projectIds]
-    );
+    const projects = await this.db('projects')
+      .select(
+        'id', 'title', 'description', 'short_description', 'thumbnail', 'screenshots',
+        'demo_url', 'download_url', 'source_code_file', 'prompt', 'framework', 'tags',
+        'styles', 'category', 'likes', 'views', 'downloads', 'collection_ids',
+        'created_at', 'updated_at'
+      )
+      .whereIn('id', projectIds);
 
-    return result.rows.map(row => this.mapRowToProject(row));
+    return projects.map((row: any) => this.mapRowToProject(row));
   }
 
   // ============================================
@@ -113,17 +144,18 @@ export class PostgresCollectionRepository implements ICollectionRepository {
    * @param excludeId - ID collection نريد استثناءه (مفيد للتحديث)
    */
   async existsByTitle(title: string, excludeId?: string): Promise<boolean> {
-    let query = 'SELECT COUNT(*) FROM collections WHERE LOWER(title) = LOWER($1)';
-    const params: any[] = [title];
+    let query = this.db('collections')
+      .whereRaw('LOWER(title) = LOWER(?)', [title])
+      .count('* as count')
+      .first();
 
     // استثناء collection معين عند التحديث
     if (excludeId) {
-      query += ' AND id != $2';
-      params.push(excludeId);
+      query = query.whereNot('id', excludeId);
     }
 
-    const result = await pgPool.query(query, params);
-    const count = parseInt(result.rows[0].count, 10);
+    const result = await query;
+    const count = parseInt(String(result?.count || 0), 10);
 
     return count > 0;
   }
@@ -134,98 +166,77 @@ export class PostgresCollectionRepository implements ICollectionRepository {
   async create(data: CreateCollectionData): Promise<CollectionData> {
     const id = `coll-${uuidv4()}`;
 
-    const result = await pgPool.query(
-      `INSERT INTO collections (
-        id, title, description, thumbnail, project_ids, tags, featured, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-      RETURNING *`,
-      [
+    const [collection] = await this.db('collections')
+      .insert({
         id,
-        data.title,
-        data.description,
-        data.thumbnail,
-        JSON.stringify(data.projectIds || []),
-        JSON.stringify(data.tags || []),
-        data.featured || false
-      ]
-    );
+        title: data.title,
+        description: data.description,
+        thumbnail: data.thumbnail,
+        project_ids: JSON.stringify(data.projectIds || []),
+        featured: data.featured || false,
+        created_at: this.db.fn.now()
+      })
+      .returning('*');
 
-    return this.mapRowToCollection(result.rows[0]);
+    return this.mapRowToCollection(collection);
   }
 
   /**
    * تحديث collection موجود
    */
   async update(id: string, data: UpdateCollectionData): Promise<CollectionData | null> {
-    // بناء الـ query ديناميكياً (فقط الحقول الموجودة)
-    const fields: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
+    // بناء الـ update object ديناميكياً (فقط الحقول الموجودة)
+    const updateData: any = {};
 
     if (data.title !== undefined) {
-      fields.push(`title = $${paramIndex++}`);
-      values.push(data.title);
+      updateData.title = data.title;
     }
 
     if (data.description !== undefined) {
-      fields.push(`description = $${paramIndex++}`);
-      values.push(data.description);
+      updateData.description = data.description;
     }
 
     if (data.thumbnail !== undefined) {
-      fields.push(`thumbnail = $${paramIndex++}`);
-      values.push(data.thumbnail);
+      updateData.thumbnail = data.thumbnail;
     }
 
     if (data.projectIds !== undefined) {
-      fields.push(`project_ids = $${paramIndex++}`);
-      values.push(JSON.stringify(data.projectIds));
-    }
-
-    if (data.tags !== undefined) {
-      fields.push(`tags = $${paramIndex++}`);
-      values.push(JSON.stringify(data.tags));
+      updateData.project_ids = JSON.stringify(data.projectIds);
     }
 
     if (data.featured !== undefined) {
-      fields.push(`featured = $${paramIndex++}`);
-      values.push(data.featured);
+      updateData.featured = data.featured;
     }
 
     // إذا لم يتم إرسال أي حقل للتحديث
-    if (fields.length === 0) {
+    if (Object.keys(updateData).length === 0) {
       return this.findById(id);
     }
 
-    // إضافة ID في النهاية
-    values.push(id);
+    // إضافة updated_at
+    updateData.updated_at = this.db.fn.now();
 
-    const query = `
-      UPDATE collections 
-      SET ${fields.join(', ')}, updated_at = NOW()
-      WHERE id = $${paramIndex}
-      RETURNING *
-    `;
+    const [collection] = await this.db('collections')
+      .where({ id })
+      .update(updateData)
+      .returning('*');
 
-    const result = await pgPool.query(query, values);
-
-    if (result.rows.length === 0) {
+    if (!collection) {
       return null;
     }
 
-    return this.mapRowToCollection(result.rows[0]);
+    return this.mapRowToCollection(collection);
   }
 
   /**
    * حذف collection
    */
   async delete(id: string): Promise<boolean> {
-    const result = await pgPool.query(
-      'DELETE FROM collections WHERE id = $1',
-      [id]
-    );
+    const deletedCount = await this.db('collections')
+      .where({ id })
+      .delete();
 
-    // rowCount يحتوي على عدد الصفوف المحذوفة
-    return (result.rowCount || 0) > 0;
+    // deletedCount يحتوي على عدد الصفوف المحذوفة
+    return deletedCount > 0;
   }
 }

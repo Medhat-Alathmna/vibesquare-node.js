@@ -48,14 +48,15 @@ export interface QueryOptions {
 
 export interface ProjectQueryOptions extends QueryOptions {
   framework?: Framework;
-  category?: Category;
-  tags?: string[];
+  category?: Category; // Legacy: Keep for backward compatibility
+  categoryIds?: string[]; // NEW: Filter by multiple category IDs
 }
 
 export interface SearchOptions extends ProjectQueryOptions {
   query?: string;
   frameworks?: Framework[];
-  categories?: Category[];
+  categories?: Category[]; // Legacy
+  categoryIds?: string[]; // NEW: Filter by multiple category IDs
 }
 
 // Builder Social Links interface
@@ -85,9 +86,9 @@ export interface CreateProjectDTO {
   sourceCodeFile?: string;
   prompt: Prompt;
   framework: Framework;
-  tags?: string[];
   styles?: string[];
-  category: Category;
+  category: Category; // Legacy: Keep for backward compatibility
+  categoryIds?: string[]; // NEW: Array of category IDs (at least 1 required in validation)
   builder?: Builder;
   builderSocialLinks?: BuilderSocialLinks;
 }
@@ -104,9 +105,52 @@ export interface UpdateProjectDTO {
   sourceCodeFile?: string;
   prompt?: Prompt;
   framework?: Framework;
-  tags?: string[];
   styles?: string[];
-  category?: Category;
+  category?: Category; // Legacy
+  categoryIds?: string[]; // NEW: Update project categories
   builder?: Builder;
   builderSocialLinks?: BuilderSocialLinks;
+}
+
+// ============================================
+// Category System Types (New)
+// ============================================
+
+// Category Data Interface
+export interface CategoryData {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  isActive: boolean;
+  deletedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Create Category DTO
+export interface CreateCategoryDTO {
+  name: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+// Update Category DTO
+export interface UpdateCategoryDTO {
+  name?: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+// Categories Result (with pagination)
+export interface CategoriesResult {
+  categories: CategoryData[];
+  pagination: PaginationResult;
+}
+
+// Category Query Options
+export interface CategoryQueryOptions extends QueryOptions {
+  isActive?: boolean;
+  includeDeleted?: boolean;
+  includeUsageStats?: boolean;
 }
