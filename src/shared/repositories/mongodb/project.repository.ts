@@ -39,7 +39,6 @@ export class MongoProjectRepository implements IProjectRepository {
       thumbnail: doc.thumbnail,
       framework: doc.framework,
       category: doc.category,
-      tags: doc.tags || [],
       likes: doc.likes || 0,
       views: doc.views || 0,
       downloads: doc.downloads || 0,
@@ -52,13 +51,12 @@ export class MongoProjectRepository implements IProjectRepository {
   }
 
   async findAll(options: ProjectQueryOptions): Promise<ProjectListResult> {
-    const { page = 1, limit = 12, framework, category, tags, sortBy = 'recent' } = options;
+    const { page = 1, limit = 12, framework, category, sortBy = 'recent' } = options;
     const skip = (page - 1) * limit;
 
     const filter: Record<string, any> = {};
     if (framework) filter.framework = framework;
     if (category) filter.category = category;
-    if (tags && tags.length > 0) filter.tags = { $in: tags };
 
     const sort = this.getSortOption(sortBy);
 
@@ -85,7 +83,7 @@ export class MongoProjectRepository implements IProjectRepository {
   }
 
   async search(options: SearchOptions): Promise<ProjectListResult> {
-    const { query, frameworks, categories, tags, sortBy = 'recent', page = 1, limit = 12 } = options;
+    const { query, frameworks, categories, sortBy = 'recent', page = 1, limit = 12 } = options;
     const skip = (page - 1) * limit;
 
     const filter: Record<string, any> = {};
@@ -101,9 +99,6 @@ export class MongoProjectRepository implements IProjectRepository {
     }
     if (categories && categories.length > 0) {
       filter.category = { $in: categories };
-    }
-    if (tags && tags.length > 0) {
-      filter.tags = { $in: tags };
     }
 
     const sort = this.getSortOption(sortBy);
@@ -168,7 +163,6 @@ export class MongoProjectRepository implements IProjectRepository {
       id: uuidv4(),
       ...data,
       screenshots: data.screenshots || [],
-      tags: data.tags || [],
       styles: data.styles || [],
       collectionIds: [],
       likes: 0,

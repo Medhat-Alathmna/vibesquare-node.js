@@ -50,7 +50,6 @@ export const adminProjectsValidator = {
       sourceCodeFile: Joi.string().uri().allow('', null).optional(),
       prompt: promptSchema.required(),
       framework: Joi.string().valid(...FRAMEWORKS).required(),
-      tags: Joi.array().items(Joi.string()).optional(),
       styles: Joi.array().items(Joi.string()).optional(),
       category: Joi.string().valid(...CATEGORIES).required(), // Legacy: Keep for backward compatibility
       categoryIds: Joi.array()
@@ -80,7 +79,6 @@ export const adminProjectsValidator = {
       sourceCodeFile: Joi.string().uri().allow('', null).optional(),
       prompt: promptSchema.optional(),
       framework: Joi.string().valid(...FRAMEWORKS).optional(),
-      tags: Joi.array().items(Joi.string()).optional(),
       styles: Joi.array().items(Joi.string()).optional(),
       category: Joi.string().valid(...CATEGORIES).optional(), // Legacy
       categoryIds: Joi.array()

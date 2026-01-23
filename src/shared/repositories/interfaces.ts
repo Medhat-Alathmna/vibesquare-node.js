@@ -82,7 +82,6 @@ export interface CollectionData {
   description: string;
   thumbnail: string;
   projectIds: string[];
-  tags: string[];
   categories?: CategoryData[]; // NEW: Array of category objects
   createdAt: Date;
   featured: boolean;
@@ -99,7 +98,6 @@ export interface CreateCollectionData {
   description: string;
   thumbnail: string;
   projectIds?: string[];
-  tags?: string[];
   categoryIds?: string[]; // NEW: Array of category IDs (at least 1 required in validation)
   featured?: boolean;
 }
@@ -110,7 +108,6 @@ export interface UpdateCollectionData {
   description?: string;
   thumbnail?: string;
   projectIds?: string[];
-  tags?: string[];
   categoryIds?: string[]; // NEW: Update collection categories
   featured?: boolean;
 }

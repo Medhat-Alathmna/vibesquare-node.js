@@ -347,7 +347,6 @@ export class GalleryUsersService {
           thumbnail: project.thumbnail,
           framework: project.framework,
           category: project.category,
-          tags: project.tags,
           likes: project.likes,
           views: project.views
         } : null

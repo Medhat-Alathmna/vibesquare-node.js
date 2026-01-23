@@ -15,7 +15,6 @@ export class PostgresCollectionRepository implements ICollectionRepository {
       description: row.description,
       thumbnail: row.thumbnail,
       projectIds: row.project_ids || [],
-      tags: row.tags || [],
       createdAt: row.created_at,
       featured: row.featured || false
     };
@@ -34,7 +33,6 @@ export class PostgresCollectionRepository implements ICollectionRepository {
       sourceCodeFile: row.source_code_file,
       prompt: row.prompt || {},
       framework: row.framework,
-      tags: row.tags || [],
       styles: row.styles || [],
       category: row.category,
       likes: row.likes || 0,
@@ -175,7 +173,6 @@ export class PostgresCollectionRepository implements ICollectionRepository {
         description: data.description,
         thumbnail: data.thumbnail,
         project_ids: JSON.stringify(data.projectIds || []),
-        tags: JSON.stringify(data.tags || []),
         featured: data.featured || false,
         created_at: this.db.fn.now()
       })
@@ -205,10 +202,6 @@ export class PostgresCollectionRepository implements ICollectionRepository {
 
     if (data.projectIds !== undefined) {
       updateData.project_ids = JSON.stringify(data.projectIds);
-    }
-
-    if (data.tags !== undefined) {
-      updateData.tags = JSON.stringify(data.tags);
     }
 
     if (data.featured !== undefined) {

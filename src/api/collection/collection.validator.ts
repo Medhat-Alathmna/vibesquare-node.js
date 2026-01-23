@@ -59,14 +59,6 @@ export const createCollection = {
         'array.base': 'Project IDs must be an array'
       }),
 
-    tags: Joi.array()
-      .items(Joi.string())
-      .optional()
-      .default([])
-      .messages({
-        'array.base': 'Tags must be an array'
-      }),
-
     categoryIds: Joi.array()
       .items(Joi.string().uuid())
       .min(1)
@@ -122,13 +114,6 @@ export const updateCollection = {
       .optional()
       .messages({
         'array.base': 'Project IDs must be an array'
-      }),
-
-    tags: Joi.array()
-      .items(Joi.string())
-      .optional()
-      .messages({
-        'array.base': 'Tags must be an array'
       }),
 
     categoryIds: Joi.array()

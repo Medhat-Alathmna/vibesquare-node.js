@@ -536,7 +536,6 @@ export interface FavoriteWithProject {
     thumbnail: string;
     framework: string;
     category: string;
-    tags: string[];
     likes: number;
     views: number;
   } | null;
