@@ -67,3 +67,44 @@ export const analyzeUrlV2 = {
       }),
   }),
 };
+
+// Pipeline types
+const PIPELINE_TYPES = ['visual', 'technical', 'both'] as const;
+const DETAIL_LEVELS = ['basic', 'detailed', 'comprehensive'] as const;
+
+/**
+ * V2.5 Analyze URL Validator (Visual + Technical Architecture Pipeline)
+ *
+ * Generates a comprehensive PRD including:
+ * - Visual Design (from V2 pipeline)
+ * - Database Schema (XML)
+ * - Backend Architecture (XML)
+ * - Security Recommendations (XML)
+ * - Testing Strategy (XML)
+ * - DevOps Configuration (XML)
+ */
+export const analyzeUrlV25 = {
+  body: Joi.object({
+    url: Joi.string().uri({ scheme: ['http', 'https'] }).required()
+      .messages({
+        'string.uri': 'URL must be a valid HTTP or HTTPS URL',
+        'any.required': 'URL is required',
+      }),
+    pipelineType: Joi.string().valid(...PIPELINE_TYPES).default('both')
+      .messages({
+        'any.only': `Pipeline type must be one of: ${PIPELINE_TYPES.join(', ')}`,
+      }),
+    detailLevel: Joi.string().valid(...DETAIL_LEVELS).default('detailed')
+      .messages({
+        'any.only': `Detail level must be one of: ${DETAIL_LEVELS.join(', ')}`,
+      }),
+    tier: Joi.string().valid(...USER_TIERS).optional()
+      .messages({
+        'any.only': `Tier must be one of: ${USER_TIERS.join(', ')}`,
+      }),
+    includeDebug: Joi.boolean().default(false)
+      .messages({
+        'boolean.base': 'includeDebug must be a boolean',
+      }),
+  }),
+};

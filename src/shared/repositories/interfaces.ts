@@ -172,3 +172,104 @@ export interface ICategoryRepository {
   removeFromCollection(collectionId: string, categoryIds: string[]): Promise<void>;
   getCollectionCategories(collectionId: string): Promise<CategoryData[]>;
 }
+
+// ============================================
+// PRD Repository Interface (Technical Pipeline)
+// ============================================
+
+export type PRDPipelineType = 'visual' | 'technical' | 'both';
+export type PRDDetailLevel = 'basic' | 'detailed' | 'comprehensive';
+
+export interface PRDData {
+  id: string;
+  userId?: string;
+  sourceUrl: string;
+  pipelineType: PRDPipelineType;
+  detailLevel: PRDDetailLevel;
+
+  // Analysis data
+  visualAnalysis?: Record<string, any>;
+  databaseSchema?: string;
+  backendArchitecture?: string;
+  securityRecommendations?: string;
+  testingStrategy?: string;
+  devopsConfig?: string;
+
+  // Validation
+  validationResult?: string;
+  validationScore?: number;
+  qaReview?: string;
+  qaIterations: number;
+  qaApproved: boolean;
+
+  // Final output
+  prdMarkdown: string;
+
+  // Timestamps
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PRDSummary {
+  id: string;
+  sourceUrl: string;
+  pipelineType: PRDPipelineType;
+  detailLevel: PRDDetailLevel;
+  validationScore?: number;
+  qaApproved: boolean;
+  createdAt: Date;
+}
+
+export interface PRDListResult {
+  prds: PRDSummary[];
+  pagination: PaginationResult;
+}
+
+export interface CreatePRDDTO {
+  userId?: string;
+  sourceUrl: string;
+  pipelineType: PRDPipelineType;
+  detailLevel: PRDDetailLevel;
+  visualAnalysis?: Record<string, any>;
+  databaseSchema?: string;
+  backendArchitecture?: string;
+  securityRecommendations?: string;
+  testingStrategy?: string;
+  devopsConfig?: string;
+  validationResult?: string;
+  validationScore?: number;
+  qaReview?: string;
+  qaIterations?: number;
+  qaApproved?: boolean;
+  prdMarkdown: string;
+}
+
+export interface UpdatePRDDTO {
+  visualAnalysis?: Record<string, any>;
+  databaseSchema?: string;
+  backendArchitecture?: string;
+  securityRecommendations?: string;
+  testingStrategy?: string;
+  devopsConfig?: string;
+  validationResult?: string;
+  validationScore?: number;
+  qaReview?: string;
+  qaIterations?: number;
+  qaApproved?: boolean;
+  prdMarkdown?: string;
+}
+
+export interface IPRDRepository {
+  // Read operations
+  findById(id: string): Promise<PRDData | null>;
+  findByUserId(userId: string, page?: number, limit?: number): Promise<PRDListResult>;
+  findByUrl(url: string): Promise<PRDData[]>;
+
+  // CRUD operations
+  create(data: CreatePRDDTO): Promise<PRDData>;
+  update(id: string, data: UpdatePRDDTO): Promise<PRDData | null>;
+  delete(id: string): Promise<boolean>;
+
+  // Helper methods
+  getMarkdown(id: string): Promise<string | null>;
+}

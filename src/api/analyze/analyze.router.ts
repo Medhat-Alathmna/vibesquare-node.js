@@ -50,4 +50,39 @@ router.post('/v2',
   analyzeController.analyzeUrlV2
 );
 
+/**
+ * POST /api/analyze/v2.5
+ * V2.5: Analyze a URL using Visual + Technical Architecture Pipeline
+ *
+ * Generates comprehensive PRD (Product Requirements Document) including:
+ * - Visual Design (from V2 pipeline - Layout, Components, Design System)
+ * - Database Schema (XML format)
+ * - Backend Architecture (REST/GraphQL endpoints, Auth)
+ * - Security Recommendations (OWASP, Auth, Data Protection)
+ * - Testing Strategy (Unit/API tests, Coverage)
+ * - DevOps Configuration (Docker, CI/CD, Hosting)
+ *
+ * Uses LangGraph orchestration with layered agents:
+ * - Layer 1: Database Agent (schema inference)
+ * - Layer 2: Backend, Security, Testing, DevOps Agents (parallel)
+ * - Layer 3: PRD Validator, QA Agent (sequential with iteration)
+ *
+ * @requires Authentication (disabled)
+ * @body {string} url - The URL to analyze (required)
+ * @body {string} pipelineType - Pipeline type: "visual" | "technical" | "both" (default: "both")
+ * @body {string} detailLevel - Detail level: "basic" | "detailed" | "comprehensive" (default: "detailed")
+ * @body {string} tier - User tier for token budget (optional)
+ * @body {boolean} includeDebug - Include debug information (optional, default: false)
+ *
+ * @returns {object} Response
+ * @returns {string} Response.prdId - Saved PRD ID for future reference
+ * @returns {string} Response.prdMarkdown - Complete PRD in markdown format
+ * @returns {object} Response.metadata - Processing metadata (timing, validation score, QA status)
+ */
+router.post('/v2.5',
+  // authenticate(),
+  validate(analyzeValidator.analyzeUrlV25),
+  analyzeController.analyzeUrlV25
+);
+
 export default router;

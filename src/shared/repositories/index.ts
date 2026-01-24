@@ -1,6 +1,6 @@
 import { env } from '../../config/env';
-import { IProjectRepository, ICollectionRepository, ICategoryRepository } from './interfaces';
-import { PostgresProjectRepository, PostgresCollectionRepository, PostgresCategoryRepository } from './postgres';
+import { IProjectRepository, ICollectionRepository, ICategoryRepository, IPRDRepository } from './interfaces';
+import { PostgresProjectRepository, PostgresCollectionRepository, PostgresCategoryRepository, PostgresPRDRepository } from './postgres';
 import { MongoProjectRepository, MongoCollectionRepository } from './mongodb';
 
 export * from './interfaces';
@@ -9,6 +9,7 @@ export * from './interfaces';
 let projectRepository: IProjectRepository | null = null;
 let collectionRepository: ICollectionRepository | null = null;
 let categoryRepository: ICategoryRepository | null = null;
+let prdRepository: IPRDRepository | null = null;
 
 export function getProjectRepository(): IProjectRepository {
   if (!projectRepository) {
@@ -42,4 +43,16 @@ export function getCategoryRepository(): ICategoryRepository {
     categoryRepository = new PostgresCategoryRepository();
   }
   return categoryRepository;
+}
+
+/**
+ * Get PRD Repository instance (PostgreSQL only)
+ * Note: PRDs are stored in PostgreSQL only
+ */
+export function getPRDRepository(): IPRDRepository {
+  if (!prdRepository) {
+    // PRDs are PostgreSQL-only (no MongoDB support)
+    prdRepository = new PostgresPRDRepository();
+  }
+  return prdRepository;
 }

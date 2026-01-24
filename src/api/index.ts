@@ -8,6 +8,7 @@ import { galleryRouter } from './gallery';
 import { uploadRouter } from './upload';
 import { filesRouter } from './files';
 import { categoryRouter } from './category/category.router';
+import { prdRouter } from './prd';
 
 const router = Router();
 
@@ -31,5 +32,6 @@ router.use('/projects', projectRouter);
 router.use('/collections', collectionRouter);
 router.use('/categories', categoryRouter);
 router.use('/analyze', analyzeRouter);
+router.use('/prd', prdRouter);
 
 export default router;
