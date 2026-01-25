@@ -111,6 +111,12 @@ ${visual.layoutAnalysis?.layoutPattern || 'Standard responsive layout'}
 ### 1.5 Components Detected
 ${visual.componentIdentification?.components?.map((c) => `- ${c.type}: ${c.count} instance(s)`).join('\n') || '- Standard UI components'}
 
+### 1.6 UI/UX Implementation Prompt
+
+\`\`\`
+${visual.finalPrompt || 'Visual prompt not available.'}
+\`\`\`
+
 ---
 `;
 }
