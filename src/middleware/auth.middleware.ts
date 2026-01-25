@@ -47,11 +47,17 @@ export const authenticate = (required = true) => {
       const user = await userRepository.findById(payload.sub);
 
       if (!user) {
-        return next(new ApiError(httpStatus.UNAUTHORIZED, 'User not found'));
+        if (required) {
+          return next(new ApiError(httpStatus.UNAUTHORIZED, 'User not found'));
+        }
+        return next();
       }
 
       if (!user.isActive) {
-        return next(new ApiError(httpStatus.FORBIDDEN, 'Account is deactivated'));
+        if (required) {
+          return next(new ApiError(httpStatus.FORBIDDEN, 'Account is deactivated'));
+        }
+        return next();
       }
 
       // Check if password was changed after token was issued

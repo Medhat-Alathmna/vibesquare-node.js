@@ -67,13 +67,14 @@ export const analyzeUrlV2 = asyncHandler(async (req: Request, res: Response) => 
  * Returns complete PRD in markdown format
  */
 export const analyzeUrlV25 = asyncHandler(async (req: Request, res: Response) => {
-  const { url, pipelineType, detailLevel, tier, includeDebug } = req.body;
+  const { url, pipelineType, detailLevel, apiStyle, tier, includeDebug } = req.body;
   const userId = (req as any).user?.id; // Optional: from auth middleware
 
   const result = await analyzeService.analyzeUrlV25({
     url,
     pipelineType: pipelineType as PipelineType,
     detailLevel: detailLevel as DetailLevel,
+    apiStyle: apiStyle || 'REST',
     tier,
     userId,
     includeDebug: includeDebug ?? false,

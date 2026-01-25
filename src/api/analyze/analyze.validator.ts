@@ -98,6 +98,10 @@ export const analyzeUrlV25 = {
       .messages({
         'any.only': `Detail level must be one of: ${DETAIL_LEVELS.join(', ')}`,
       }),
+    apiStyle: Joi.string().valid('REST', 'GraphQL', 'REST_GraphQL').default('REST')
+      .messages({
+        'any.only': "API style must be one of: REST, GraphQL, REST_GraphQL",
+      }),
     tier: Joi.string().valid(...USER_TIERS).optional()
       .messages({
         'any.only': `Tier must be one of: ${USER_TIERS.join(', ')}`,

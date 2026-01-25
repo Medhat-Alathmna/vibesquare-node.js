@@ -1,6 +1,6 @@
 import { executePipeline, executePipelineV2, LLMModel, PipelineResult, UserTier, PipelineV2Result } from './pipeline';
 import { executeTechnicalPipeline } from './technical';
-import { PipelineType, DetailLevel, TechnicalPipelineResult, VisualPipelineResult } from './technical/core/technical-agent.types';
+import { PipelineType, DetailLevel, APIStyle, TechnicalPipelineResult, VisualPipelineResult } from './technical/core/technical-agent.types';
 import { getPRDRepository, CreatePRDDTO } from '../../shared/repositories';
 
 export interface AnalyzeOptions {
@@ -19,6 +19,7 @@ export interface AnalyzeV25Options {
   url: string;
   pipelineType?: PipelineType;
   detailLevel?: DetailLevel;
+  apiStyle?: APIStyle;
   tier?: UserTier;
   userId?: string;
   includeDebug?: boolean;
@@ -105,6 +106,7 @@ export class AnalyzeService {
       url,
       pipelineType = 'both',
       detailLevel = 'detailed',
+      apiStyle = 'REST',
       tier,
       userId,
       includeDebug = false,
@@ -156,12 +158,11 @@ export class AnalyzeService {
             },
           };
 
-      technicalResult = await executeTechnicalPipeline({
-        visualResults: visualPipelineInput,
+      technicalResult = await executeTechnicalPipeline(
+        visualPipelineInput,
         detailLevel,
-        pipelineType,
-        enableWebSearch: true,
-      });
+        apiStyle
+      );
       console.log(`[Pipeline V2.5] Technical Pipeline completed in ${technicalResult.metadata.processingTimeMs}ms`);
     }
 

@@ -19,6 +19,7 @@ import {
 import {
   VisualPipelineResult,
   DetailLevel,
+  APIStyle,
   TechnicalAgentInput,
   TechnicalPipelineResult,
 } from '../core/technical-agent.types';
@@ -30,6 +31,7 @@ import { backendAgent } from '../agents/layer-2/backend.agent';
 import { securityAgent } from '../agents/layer-2/security.agent';
 import { testingAgent } from '../agents/layer-2/testing.agent';
 import { devopsAgent } from '../agents/layer-2/devops.agent';
+import { userStoryAgent } from '../agents/layer-2/user-story.agent';
 import { prdValidatorAgent } from '../agents/layer-3/prd-validator.agent';
 import { qaAgent } from '../agents/layer-3/qa.agent';
 
@@ -80,6 +82,7 @@ async function backendAgentNode(state: TechnicalGraphStateType): Promise<Partial
     const input: TechnicalAgentInput = {
       visualResults: state.visualResults,
       detailLevel: state.detailLevel,
+      apiStyle: state.apiStyle,
       previousOutputs: {
         databaseSchema: state.databaseSchema,
       },
@@ -118,6 +121,7 @@ async function securityAgentNode(state: TechnicalGraphStateType): Promise<Partia
     const input: TechnicalAgentInput = {
       visualResults: state.visualResults,
       detailLevel: state.detailLevel,
+      apiStyle: state.apiStyle,
       previousOutputs: {
         databaseSchema: state.databaseSchema,
         backendArchitecture: state.backendArchitecture,
@@ -157,6 +161,7 @@ async function testingAgentNode(state: TechnicalGraphStateType): Promise<Partial
     const input: TechnicalAgentInput = {
       visualResults: state.visualResults,
       detailLevel: state.detailLevel,
+      apiStyle: state.apiStyle,
       previousOutputs: {
         databaseSchema: state.databaseSchema,
         backendArchitecture: state.backendArchitecture,
@@ -196,6 +201,7 @@ async function devopsAgentNode(state: TechnicalGraphStateType): Promise<Partial<
     const input: TechnicalAgentInput = {
       visualResults: state.visualResults,
       detailLevel: state.detailLevel,
+      apiStyle: state.apiStyle,
       previousOutputs: {
         databaseSchema: state.databaseSchema,
       },
@@ -225,6 +231,46 @@ async function devopsAgentNode(state: TechnicalGraphStateType): Promise<Partial<
 }
 
 /**
+ * User Story Agent Node (Layer 2)
+ */
+async function userStoryAgentNode(state: TechnicalGraphStateType): Promise<Partial<TechnicalGraphStateType>> {
+  console.log('[Technical Pipeline] Running User Story Agent...');
+
+  try {
+    const input: TechnicalAgentInput = {
+      visualResults: state.visualResults,
+      detailLevel: state.detailLevel,
+      apiStyle: state.apiStyle,
+      previousOutputs: {
+        databaseSchema: state.databaseSchema,
+        backendArchitecture: state.backendArchitecture,
+      },
+    };
+
+    const result = await userStoryAgent.executeWithRetry(input);
+
+    return {
+      userStories: result.xml,
+      agentStatus: { userStory: 'completed' },
+      tokenUsage: result.tokenUsage,
+    };
+  } catch (error) {
+    const agentError = createTechnicalAgentError(
+      'userStory',
+      error instanceof Error ? error : new Error('Unknown error'),
+      false
+    );
+
+    console.warn('[Technical Pipeline] User Story Agent failed, skipping:', error);
+
+    return {
+      errors: [agentError],
+      agentStatus: { userStory: 'failed' },
+    };
+  }
+}
+
+/**
  * PRD Validator Node (Layer 3)
  */
 async function prdValidatorNode(state: TechnicalGraphStateType): Promise<Partial<TechnicalGraphStateType>> {
@@ -234,12 +280,14 @@ async function prdValidatorNode(state: TechnicalGraphStateType): Promise<Partial
     const input: TechnicalAgentInput = {
       visualResults: state.visualResults,
       detailLevel: state.detailLevel,
+      apiStyle: state.apiStyle,
       previousOutputs: {
         databaseSchema: state.databaseSchema,
         backendArchitecture: state.backendArchitecture,
         securityRecommendations: state.securityRecommendations,
         testingStrategy: state.testingStrategy,
         devopsConfig: state.devopsConfig,
+        userStories: state.userStories,
       },
     };
 
@@ -277,12 +325,14 @@ async function qaAgentNode(state: TechnicalGraphStateType): Promise<Partial<Tech
     const input: TechnicalAgentInput = {
       visualResults: state.visualResults,
       detailLevel: state.detailLevel,
+      apiStyle: state.apiStyle,
       previousOutputs: {
         databaseSchema: state.databaseSchema,
         backendArchitecture: state.backendArchitecture,
         securityRecommendations: state.securityRecommendations,
         testingStrategy: state.testingStrategy,
         devopsConfig: state.devopsConfig,
+        userStories: state.userStories,
         validationResult: state.validationResult,
       },
     };
@@ -399,6 +449,7 @@ export function createTechnicalGraph() {
     .addNode('security_agent', securityAgentNode)
     .addNode('testing_agent', testingAgentNode)
     .addNode('devops_agent', devopsAgentNode)
+    .addNode('user_story_agent', userStoryAgentNode)
 
     // Layer 3: Sequential validation
     .addNode('prd_validator', prdValidatorNode)
@@ -417,12 +468,14 @@ export function createTechnicalGraph() {
     .addEdge('database_agent', 'security_agent')
     .addEdge('database_agent', 'testing_agent')
     .addEdge('database_agent', 'devops_agent')
+    .addEdge('database_agent', 'user_story_agent')
 
     // All layer 2 converge to validator
     .addEdge('backend_agent', 'prd_validator')
     .addEdge('security_agent', 'prd_validator')
     .addEdge('testing_agent', 'prd_validator')
     .addEdge('devops_agent', 'prd_validator')
+    .addEdge('user_story_agent', 'prd_validator')
 
     // Validator to QA
     .addConditionalEdges('prd_validator', afterValidator, {
@@ -446,14 +499,15 @@ export function createTechnicalGraph() {
  */
 export async function executeTechnicalPipeline(
   visualResults: VisualPipelineResult,
-  detailLevel: DetailLevel
+  detailLevel: DetailLevel,
+  apiStyle?: APIStyle
 ): Promise<TechnicalPipelineResult> {
   const startTime = Date.now();
   console.log('[Technical Pipeline] Starting execution...');
 
   try {
     // Create initial state
-    const initialState = createInitialTechnicalState(visualResults, detailLevel);
+    const initialState = createInitialTechnicalState(visualResults, detailLevel, apiStyle);
 
     // Create and run the graph
     const graph = createTechnicalGraph();
@@ -477,15 +531,29 @@ export async function executeTechnicalPipeline(
       securityRecommendations: finalState.securityRecommendations || '',
       testingStrategy: finalState.testingStrategy || '',
       devopsConfig: finalState.devopsConfig || '',
+      userStories: finalState.userStories || '',
       validationResult: finalState.validationResult || '',
       qaReview: finalState.qaReview || '',
       summaries: {
         database: { xml: finalState.databaseSchema || '', entities: [], relations: [], enums: [] },
-        backend: { xml: finalState.backendArchitecture || '', endpoints: [], techStack: { framework: 'Express', runtime: 'Node.js', apiStyle: 'REST + GraphQL' } },
+        backend: { xml: finalState.backendArchitecture || '', endpoints: [], techStack: { framework: 'Express', runtime: 'Node.js', apiStyle: 'REST' } },
         security: { xml: finalState.securityRecommendations || '', owaspCoverage: [], securityScore: 0 },
         testing: { xml: finalState.testingStrategy || '', testSuites: [], coverageTarget: 80 },
         devops: { xml: finalState.devopsConfig || '', services: [], hostingRecommendations: [] },
-        validation: { xml: finalState.validationResult || '', scores: { completeness: 0, consistency: 0, security: 0, implementability: 0, overall: 0 }, issues: [], approved: false },
+        userStory: {
+          xml: finalState.userStories || '',
+          productContext: {
+            background: { description: '', isNewFeature: false },
+            problemStatement: { problem: '', affectedUsers: [], currentWorkarounds: [], impactIfNotSolved: '' },
+            goalsAndNonGoals: { goals: [], nonGoals: [], successMetrics: [] },
+          },
+          personas: [],
+          epics: [],
+          allFeatures: [],
+          allStories: [],
+          summary: { totalEpics: 0, totalFeatures: 0, totalStories: 0, totalPersonas: 0, estimatedComplexity: 'medium', estimatedDuration: 'Unknown' },
+        },
+        validation: { xml: finalState.validationResult || '', scores: { completeness: 0, consistency: 0, security: 0, implementability: 0, acceptanceCriteria: 0, nonGoals: 0, tradeoffs: 0, overall: 0 }, issues: [], nonGoalsIdentified: [], tradeoffsIdentified: [], approved: false },
         qa: {
           xml: finalState.qaReview || '',
           iteration: finalState.qaIterations,

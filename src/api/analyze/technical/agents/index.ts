@@ -12,6 +12,7 @@ export { backendAgent } from './layer-2/backend.agent';
 export { securityAgent } from './layer-2/security.agent';
 export { testingAgent } from './layer-2/testing.agent';
 export { devopsAgent } from './layer-2/devops.agent';
+export { userStoryAgent } from './layer-2/user-story.agent';
 
 // Layer 3
 export { prdValidatorAgent } from './layer-3/prd-validator.agent';
@@ -24,6 +25,7 @@ export type TechnicalAgentName =
   | 'security'
   | 'testing'
   | 'devops'
+  | 'userStory'
   | 'prdValidator'
   | 'qa';
 
@@ -34,6 +36,7 @@ export const technicalAgentLoaders: Record<TechnicalAgentName, () => Promise<any
   security: () => import('./layer-2/security.agent').then((m) => m.securityAgent),
   testing: () => import('./layer-2/testing.agent').then((m) => m.testingAgent),
   devops: () => import('./layer-2/devops.agent').then((m) => m.devopsAgent),
+  userStory: () => import('./layer-2/user-story.agent').then((m) => m.userStoryAgent),
   prdValidator: () => import('./layer-3/prd-validator.agent').then((m) => m.prdValidatorAgent),
   qa: () => import('./layer-3/qa.agent').then((m) => m.qaAgent),
 };

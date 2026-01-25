@@ -9,6 +9,7 @@ import { Annotation } from '@langchain/langgraph';
 import {
   VisualPipelineResult,
   DetailLevel,
+  APIStyle,
   TechnicalAgentStatusMap,
   TechnicalAgentError,
   TechnicalAgentStatus,
@@ -44,6 +45,11 @@ export const TechnicalGraphState = Annotation.Root({
     default: () => 'detailed',
   }),
 
+  apiStyle: Annotation<APIStyle>({
+    reducer: (_, next) => next,
+    default: () => 'REST',
+  }),
+
   // Pipeline start time
   startTime: Annotation<number>({
     reducer: (_, next) => next,
@@ -73,6 +79,11 @@ export const TechnicalGraphState = Annotation.Root({
   }),
 
   devopsConfig: Annotation<string | undefined>({
+    reducer: (_, next) => next,
+    default: () => undefined,
+  }),
+
+  userStories: Annotation<string | undefined>({
     reducer: (_, next) => next,
     default: () => undefined,
   }),
@@ -121,6 +132,7 @@ export const TechnicalGraphState = Annotation.Root({
       security: 'pending',
       testing: 'pending',
       devops: 'pending',
+      userStory: 'pending',
       prdValidator: 'pending',
       qa: 'pending',
       prdSynthesizer: 'pending',
@@ -144,17 +156,20 @@ export type TechnicalGraphStateType = typeof TechnicalGraphState.State;
  */
 export function createInitialTechnicalState(
   visualResults: VisualPipelineResult,
-  detailLevel: DetailLevel
+  detailLevel: DetailLevel,
+  apiStyle?: APIStyle
 ): TechnicalGraphStateType {
   return {
     visualResults,
     detailLevel,
+    apiStyle: apiStyle || 'REST',
     startTime: Date.now(),
     databaseSchema: undefined,
     backendArchitecture: undefined,
     securityRecommendations: undefined,
     testingStrategy: undefined,
     devopsConfig: undefined,
+    userStories: undefined,
     validationResult: undefined,
     qaReview: undefined,
     qaIterations: 0,
@@ -167,6 +182,7 @@ export function createInitialTechnicalState(
       security: 'pending',
       testing: 'pending',
       devops: 'pending',
+      userStory: 'pending',
       prdValidator: 'pending',
       qa: 'pending',
       prdSynthesizer: 'pending',
@@ -199,6 +215,7 @@ export function getCompletedTechnicalAgents(state: TechnicalGraphStateType): str
   if (state.agentStatus.security === 'completed') completed.push('security');
   if (state.agentStatus.testing === 'completed') completed.push('testing');
   if (state.agentStatus.devops === 'completed') completed.push('devops');
+  if (state.agentStatus.userStory === 'completed') completed.push('userStory');
   if (state.agentStatus.prdValidator === 'completed') completed.push('prdValidator');
   if (state.agentStatus.qa === 'completed') completed.push('qa');
   if (state.agentStatus.prdSynthesizer === 'completed') completed.push('prdSynthesizer');
@@ -210,7 +227,7 @@ export function getCompletedTechnicalAgents(state: TechnicalGraphStateType): str
  * Check if Layer 2 is complete
  */
 export function isLayer2Complete(state: TechnicalGraphStateType): boolean {
-  const layer2Agents = ['backend', 'security', 'testing', 'devops'] as const;
+  const layer2Agents = ['backend', 'security', 'testing', 'devops', 'userStory'] as const;
 
   // At least backend must complete (it's the most important)
   if (state.agentStatus.backend !== 'completed' && state.agentStatus.backend !== 'skipped') {

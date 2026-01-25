@@ -55,6 +55,11 @@ ${visualResults.layoutAnalysis?.sections?.map((s) => `- ${s.type} (${s.position}
 
 ## Current PRD Components
 
+### User Stories & Product Requirements:
+\`\`\`xml
+${previousOutputs?.userStories?.substring(0, 2500) || 'NOT PROVIDED'}${(previousOutputs?.userStories?.length || 0) > 2500 ? '...' : ''}
+\`\`\`
+
 ### Database Schema:
 \`\`\`xml
 ${previousOutputs?.databaseSchema?.substring(0, 1500) || 'NOT PROVIDED'}${(previousOutputs?.databaseSchema?.length || 0) > 1500 ? '...' : ''}
@@ -113,16 +118,51 @@ ${previousOutputs?.validationResult?.substring(0, 1500) || 'NOT PROVIDED'}${(pre
       - Comments → endpoint?
       - Real-time features → WebSocket/subscription?
 
-4. **Summary**:
+4. **NEW - User Stories Alignment Checks**:
+
+   a) **Personas match UI components**:
+      - Do personas align with detected UI components?
+      - If admin panel exists, is there an admin persona?
+      - If payment forms exist, is there a buyer persona?
+      - If dashboard UI exists, is there a manager/owner persona?
+
+   b) **Stories cover all detected features**:
+      - For each form in UI, is there a create/edit story?
+      - For each list/table in UI, is there a view/search story?
+      - For each action button, is there a corresponding story?
+
+   c) **Functional requirements link to architecture**:
+      - Do functional requirements reference real endpoints?
+      - Do functional requirements reference real database entities?
+      - Are Given/When/Then scenarios realistic?
+
+   d) **Edge cases are comprehensive**:
+      - Network errors covered?
+      - Authorization failures covered?
+      - Invalid data scenarios covered?
+      - User mistakes (cancel, go back, refresh) covered?
+      - System limits (rate limit, quota) covered?
+
+   e) **Success metrics are measurable**:
+      - Can we actually measure these metrics?
+      - Are targets realistic (not "100% perfection")?
+      - Are measurement methods defined?
+
+   f) **Dependencies are valid**:
+      - Do story dependencies reference real story IDs?
+      - Are dependency chains logical (no circular deps)?
+
+5. **Summary**:
    - Count total issues by severity
    - Count how many were fixed
 
-5. **Decision**:
+6. **Decision**:
    - Set requiresAnotherPass=true if CRITICAL issues remain after fixes
    - Set finalApproval=true if:
      * No critical issues remain
      * No more than 2 major issues remain
      * Frontend-backend alignment is verified
+     * User stories alignment is verified
 
 Current iteration: ${currentIteration}/3
 ${currentIteration >= 3 ? 'THIS IS THE FINAL ITERATION - must provide finalApproval decision.' : ''}
@@ -149,9 +189,19 @@ Output complete QA XML following the format in the system prompt.`;
       const fixMatch = match.match(/<suggestedFix>([^<]*)<\/suggestedFix>/);
 
       if (sectionMatch && severityMatch) {
+        // Normalize severity to lowercase to handle case variations from LLM
+        const normalizedSeverity = severityMatch[1].toLowerCase().trim();
+
+        // Validate severity is one of the allowed values
+        const validSeverities = ['critical', 'major', 'minor'] as const;
+        if (!validSeverities.includes(normalizedSeverity as any)) {
+          console.warn(`[QAAgent] Invalid severity value: ${severityMatch[1]}, skipping critique`);
+          continue;
+        }
+
         critiques.push({
           section: sectionMatch[1],
-          severity: severityMatch[1] as 'critical' | 'major' | 'minor',
+          severity: normalizedSeverity as 'critical' | 'major' | 'minor',
           issue: issueMatch?.[1] || 'Issue identified',
           suggestedFix: fixMatch?.[1] || 'Fix suggested',
         });
@@ -191,9 +241,19 @@ Output complete QA XML following the format in the system prompt.`;
         match.match(/<fix>([^<]*)<\/fix>/)?.[1];
 
       if (nameMatch && statusMatch) {
+        // Normalize status to lowercase to handle case variations from LLM
+        const normalizedStatus = statusMatch[1].toLowerCase().trim();
+
+        // Validate status is one of the allowed values
+        const validStatuses = ['pass', 'warning', 'fail'] as const;
+        if (!validStatuses.includes(normalizedStatus as any)) {
+          console.warn(`[QAAgent] Invalid status value: ${statusMatch[1]}, skipping alignment check`);
+          continue;
+        }
+
         alignmentChecks.push({
           name: nameMatch[1],
-          status: statusMatch[1] as 'pass' | 'warning' | 'fail',
+          status: normalizedStatus as 'pass' | 'warning' | 'fail',
           issue: issueMatch?.[1],
           fix: fixMatch?.trim(),
         });
@@ -207,9 +267,19 @@ Output complete QA XML following the format in the system prompt.`;
       const statusMatch = match.match(/status="([^"]+)"/);
 
       if (nameMatch && statusMatch) {
+        // Normalize status to lowercase to handle case variations from LLM
+        const normalizedStatus = statusMatch[1].toLowerCase().trim();
+
+        // Validate status is one of the allowed values
+        const validStatuses = ['pass', 'warning', 'fail'] as const;
+        if (!validStatuses.includes(normalizedStatus as any)) {
+          console.warn(`[QAAgent] Invalid status value in self-closing check: ${statusMatch[1]}, skipping`);
+          continue;
+        }
+
         alignmentChecks.push({
           name: nameMatch[1],
-          status: statusMatch[1] as 'pass' | 'warning' | 'fail',
+          status: normalizedStatus as 'pass' | 'warning' | 'fail',
         });
       }
     }

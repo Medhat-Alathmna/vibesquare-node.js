@@ -43,25 +43,28 @@ export function synthesizePRD(
   // 1. Visual Identity
   sections.push(buildVisualIdentitySection(visualResult));
 
-  // 2. Database Schema
+  // 2. Product Requirements & User Stories (NEW)
+  sections.push(buildUserStoriesSection(technicalResult.userStories));
+
+  // 3. Database Schema (was 2)
   sections.push(buildDatabaseSection(technicalResult.databaseSchema));
 
-  // 3. API Documentation
+  // 4. API Documentation (was 3)
   sections.push(buildAPISection(technicalResult.backendArchitecture));
 
-  // 4. Security Recommendations
+  // 5. Security Recommendations (was 4)
   sections.push(buildSecuritySection(technicalResult.securityRecommendations));
 
-  // 5. Testing Strategy
+  // 6. Testing Strategy (was 5)
   sections.push(buildTestingSection(technicalResult.testingStrategy));
 
-  // 6. DevOps Configuration
+  // 7. DevOps Configuration (was 6)
   sections.push(buildDevOpsSection(technicalResult.devopsConfig));
 
-  // 7. Tech Stack Summary
+  // 8. Tech Stack Summary (was 7)
   sections.push(buildTechStackSection());
 
-  // 8. Validation Report
+  // 9. Validation Report (was 8)
   sections.push(buildValidationReportSection(validationScores, qaIterations));
 
   // Footer
@@ -113,11 +116,500 @@ ${visual.componentIdentification?.components?.map((c) => `- ${c.type}: ${c.count
 }
 
 /**
+ * Build User Stories & Product Requirements section (8 sub-sections)
+ */
+function buildUserStoriesSection(userStoriesXml: string): string {
+  if (!userStoriesXml) {
+    return `## 2. Product Requirements & User Stories
+
+> User stories not generated.
+
+---
+`;
+  }
+
+  const sections: string[] = [];
+
+  // 2.1 Background/Overview
+  sections.push(formatBackground(userStoriesXml));
+
+  // 2.2 Problem Statement
+  sections.push(formatProblemStatement(userStoriesXml));
+
+  // 2.3 Goals & Non-Goals
+  sections.push(formatGoalsAndNonGoals(userStoriesXml));
+
+  // 2.4 User Personas
+  sections.push(formatPersonas(userStoriesXml));
+
+  // 2.5 Epic → Feature → Story Hierarchy
+  sections.push(formatEpicFeatureStoryHierarchy(userStoriesXml));
+
+  // 2.6 Functional Requirements Summary
+  sections.push(formatFunctionalRequirementsSummary(userStoriesXml));
+
+  // 2.7 Edge Cases Summary
+  sections.push(formatEdgeCasesSummary(userStoriesXml));
+
+  // 2.8 Acceptance Criteria Summary
+  sections.push(formatAcceptanceCriteriaSummary(userStoriesXml));
+
+  return `## 2. Product Requirements & User Stories
+
+${sections.join('\n')}
+
+---
+`;
+}
+
+/**
+ * Format Background/Overview subsection
+ */
+function formatBackground(xml: string): string {
+  const backgroundMatch = xml.match(/<background>([\s\S]*?)<\/background>/);
+  if (!backgroundMatch) {
+    return `### 2.1 Background/Overview
+
+> Background information not available.
+`;
+  }
+
+  const description = extractTextContent(backgroundMatch[1], 'description') || 'Application overview not provided.';
+  const isNewFeature = extractTextContent(backgroundMatch[1], 'isNewFeature') === 'true';
+  const existingContext = extractTextContent(backgroundMatch[1], 'existingContext');
+
+  return `### 2.1 Background/Overview
+
+${description}
+
+**Type:** ${isNewFeature ? 'Feature Addition' : 'Complete Product'}
+${existingContext ? `**Existing Context:** ${existingContext}` : ''}
+`;
+}
+
+/**
+ * Format Problem Statement subsection
+ */
+function formatProblemStatement(xml: string): string {
+  const problemMatch = xml.match(/<problemStatement>([\s\S]*?)<\/problemStatement>/);
+  if (!problemMatch) {
+    return `### 2.2 Problem Statement
+
+> Problem statement not available.
+`;
+  }
+
+  const problem = extractTextContent(problemMatch[1], 'problem') || 'Problem not specified.';
+  const affectedUsers = extractListItems(problemMatch[1], 'user');
+  const workarounds = extractListItems(problemMatch[1], 'workaround');
+  const impact = extractTextContent(problemMatch[1], 'impactIfNotSolved') || 'Impact not specified.';
+
+  return `### 2.2 Problem Statement
+
+**Problem:** ${problem}
+
+**Affected Users:**
+${affectedUsers.length > 0 ? affectedUsers.map((u) => `- ${u}`).join('\n') : '- Users not specified'}
+
+**Current Workarounds:**
+${workarounds.length > 0 ? workarounds.map((w) => `- ${w}`).join('\n') : '- None identified'}
+
+**Impact if Not Solved:** ${impact}
+`;
+}
+
+/**
+ * Format Goals & Non-Goals subsection
+ */
+function formatGoalsAndNonGoals(xml: string): string {
+  const goalsMatch = xml.match(/<goalsAndNonGoals>([\s\S]*?)<\/goalsAndNonGoals>/);
+  if (!goalsMatch) {
+    return `### 2.3 Goals & Non-Goals
+
+> Goals and non-goals not available.
+`;
+  }
+
+  // Extract goals
+  const goalMatches = goalsMatch[1].match(/<goal[^>]*>([\s\S]*?)<\/goal>/g) || [];
+  const goals = goalMatches.map((g) => {
+    const priority = g.match(/priority="([^"]+)"/)?.[1] || 'must_have';
+    const description = extractTextContent(g, 'description') || 'Goal description';
+    const metric = extractTextContent(g, 'metric');
+    return { priority, description, metric };
+  });
+
+  // Extract non-goals
+  const nonGoalMatches = goalsMatch[1].match(/<nonGoal[^>]*>([\s\S]*?)<\/nonGoal>/g) || [];
+  const nonGoals = nonGoalMatches.map((ng) => {
+    const description = extractTextContent(ng, 'description') || 'Non-goal description';
+    const reason = extractTextContent(ng, 'reason') || 'Reason not specified';
+    return { description, reason };
+  });
+
+  // Extract success metrics
+  const metricsMatch = goalsMatch[1].match(/<successMetrics>([\s\S]*?)<\/successMetrics>/);
+  const metricMatches = metricsMatch ? metricsMatch[1].match(/<metric[^>]*>([\s\S]*?)<\/metric>/g) || [] : [];
+  const metrics = metricMatches.map((m) => {
+    const name = extractTextContent(m, 'name') || 'Metric';
+    const target = extractTextContent(m, 'target') || 'TBD';
+    const method = extractTextContent(m, 'measurementMethod') || 'TBD';
+    const baseline = extractTextContent(m, 'baseline') || 'N/A';
+    return { name, target, method, baseline };
+  });
+
+  return `### 2.3 Goals & Non-Goals
+
+#### Goals
+${goals.length > 0
+    ? goals.map((g, i) => `${i + 1}. **${g.description}** _(${formatPriority(g.priority)})_${g.metric ? `\n   - Metric: ${g.metric}` : ''}`).join('\n')
+    : '- No goals specified'}
+
+#### Non-Goals
+${nonGoals.length > 0
+    ? nonGoals.map((ng, i) => `${i + 1}. ${ng.description}\n   - _Reason: ${ng.reason}_`).join('\n')
+    : '- No non-goals specified'}
+
+#### Success Metrics
+${metrics.length > 0
+    ? `| Metric | Target | Measurement | Baseline |
+|--------|--------|-------------|----------|
+${metrics.map((m) => `| ${m.name} | ${m.target} | ${m.method} | ${m.baseline} |`).join('\n')}`
+    : '- No success metrics defined'}
+`;
+}
+
+/**
+ * Format User Personas subsection
+ */
+function formatPersonas(xml: string): string {
+  const personasMatch = xml.match(/<personas>([\s\S]*?)<\/personas>/);
+  if (!personasMatch) {
+    return `### 2.4 User Personas
+
+> User personas not available.
+`;
+  }
+
+  const personaMatches = personasMatch[1].match(/<persona[^>]*>([\s\S]*?)<\/persona>/g) || [];
+
+  if (personaMatches.length === 0) {
+    return `### 2.4 User Personas
+
+> No personas defined.
+`;
+  }
+
+  const personas = personaMatches.map((p) => {
+    const name = extractTextContent(p, 'name') || 'Unknown';
+    const role = extractTextContent(p, 'role') || 'User';
+    const demographicsMatch = p.match(/<demographics>([\s\S]*?)<\/demographics>/);
+    const age = demographicsMatch ? extractTextContent(demographicsMatch[1], 'age') : '';
+    const location = demographicsMatch ? extractTextContent(demographicsMatch[1], 'location') : '';
+    const expertise = demographicsMatch ? extractTextContent(demographicsMatch[1], 'technicalExpertise') || 'intermediate' : 'intermediate';
+    const needs = extractListItems(p, 'need');
+    const painPoints = extractListItems(p, 'painPoint');
+    const quotation = extractTextContent(p, 'quotation');
+
+    return `#### ${name}
+**Role:** ${role}
+**Demographics:** ${[age, location].filter(Boolean).join(', ')} _(${expertise} technical skill)_
+
+**Needs:**
+${needs.length > 0 ? needs.map((n) => `- ${n}`).join('\n') : '- Not specified'}
+
+**Pain Points:**
+${painPoints.length > 0 ? painPoints.map((pp) => `- ${pp}`).join('\n') : '- Not specified'}
+
+${quotation ? `> "${quotation}"` : ''}
+`;
+  });
+
+  return `### 2.4 User Personas
+
+${personas.join('\n---\n\n')}
+`;
+}
+
+/**
+ * Format Epic → Feature → Story Hierarchy subsection
+ */
+function formatEpicFeatureStoryHierarchy(xml: string): string {
+  const epicsMatch = xml.match(/<epics>([\s\S]*?)<\/epics>/);
+  if (!epicsMatch) {
+    return `### 2.5 Epic → Feature → Story Breakdown
+
+> User stories hierarchy not available.
+`;
+  }
+
+  const epicMatches = epicsMatch[1].match(/<epic[^>]*>([\s\S]*?)<\/epic>/g) || [];
+
+  if (epicMatches.length === 0) {
+    return `### 2.5 Epic → Feature → Story Breakdown
+
+> No epics defined.
+`;
+  }
+
+  const epics = epicMatches.map((epicXml) => {
+    const epicId = epicXml.match(/id="([^"]+)"/)?.[1] || 'E0';
+    const epicName = epicXml.match(/name="([^"]+)"/)?.[1] || 'Unnamed Epic';
+    const epicPriority = epicXml.match(/priority="([^"]+)"/)?.[1] || 'high';
+    const businessObjective = extractTextContent(epicXml, 'businessObjective') || '';
+    const estimatedDuration = extractTextContent(epicXml, 'estimatedDuration');
+
+    // Parse features
+    const featuresMatch = epicXml.match(/<features>([\s\S]*?)<\/features>/);
+    const featureMatches = featuresMatch ? featuresMatch[1].match(/<feature[^>]*>([\s\S]*?)<\/feature>/g) || [] : [];
+
+    const features = featureMatches.map((featureXml) => {
+      const featureId = featureXml.match(/id="([^"]+)"/)?.[1] || 'F0';
+      const featureName = featureXml.match(/name="([^"]+)"/)?.[1] || 'Unnamed Feature';
+      const complexity = featureXml.match(/estimatedComplexity="([^"]+)"/)?.[1] || 'medium';
+      const businessValue = extractTextContent(featureXml, 'businessValue') || '';
+
+      // Parse stories
+      const storiesMatch = featureXml.match(/<stories>([\s\S]*?)<\/stories>/);
+      const storyMatches = storiesMatch ? storiesMatch[1].match(/<story[^>]*>([\s\S]*?)<\/story>/g) || [] : [];
+
+      const stories = storyMatches.map((storyXml) => {
+        const storyId = storyXml.match(/id="([^"]+)"/)?.[1] || 'US-000';
+        const title = extractTextContent(storyXml, 'title') || 'Untitled Story';
+        const asA = extractTextContent(storyXml, 'asA') || 'user';
+        const iWant = extractTextContent(storyXml, 'iWant') || '';
+        const soThat = extractTextContent(storyXml, 'soThat') || '';
+        const priority = storyXml.match(/priority="([^"]+)"/)?.[1] || 'medium';
+        const effort = storyXml.match(/estimatedEffort="([^"]+)"/)?.[1] || 'medium';
+        const relatedEntities = extractListItems(storyXml, 'relatedEntity') || extractListItems(storyXml, 'entity');
+        const relatedEndpoints = extractListItems(storyXml, 'relatedEndpoint') || extractListItems(storyXml, 'endpoint');
+
+        return { storyId, title, asA, iWant, soThat, priority, effort, relatedEntities, relatedEndpoints };
+      });
+
+      return { featureId, featureName, complexity, businessValue, stories };
+    });
+
+    return { epicId, epicName, epicPriority, businessObjective, estimatedDuration, features };
+  });
+
+  const output = epics.map((epic) => {
+    const featuresOutput = epic.features.map((feature) => {
+      const storiesOutput = feature.stories.map((story) => {
+        return `###### ${story.storyId}: ${story.title}
+**As a** ${story.asA}, **I want** ${story.iWant}, **so that** ${story.soThat}
+
+| Priority | Effort | Related Entities | Related Endpoints |
+|----------|--------|------------------|-------------------|
+| ${formatPriority(story.priority)} | ${story.effort} | ${story.relatedEntities.join(', ') || 'N/A'} | ${story.relatedEndpoints.join(', ') || 'N/A'} |
+`;
+      }).join('\n');
+
+      return `##### Feature: ${feature.featureName} _(Complexity: ${feature.complexity})_
+**ID:** ${feature.featureId}
+${feature.businessValue ? `**Business Value:** ${feature.businessValue}` : ''}
+
+**User Stories:**
+${storiesOutput || '> No stories defined'}
+`;
+    }).join('\n---\n\n');
+
+    return `#### Epic: ${epic.epicName} _(${formatPriority(epic.epicPriority)})_
+**ID:** ${epic.epicId}
+**Business Objective:** ${epic.businessObjective || 'Not specified'}
+${epic.estimatedDuration ? `**Estimated Duration:** ${epic.estimatedDuration}` : ''}
+
+${featuresOutput || '> No features defined'}
+`;
+  }).join('\n\n---\n\n');
+
+  return `### 2.5 Epic → Feature → Story Breakdown
+
+${output}
+`;
+}
+
+/**
+ * Format Functional Requirements Summary subsection
+ */
+function formatFunctionalRequirementsSummary(xml: string): string {
+  // Count total functional requirements
+  const reqMatches = xml.match(/<requirement[^>]*>([\s\S]*?)<\/requirement>/g) || [];
+  const totalReqs = reqMatches.length;
+
+  if (totalReqs === 0) {
+    return `### 2.6 Functional Requirements Summary
+
+> No functional requirements defined.
+`;
+  }
+
+  // Sample some requirements
+  const sampleReqs = reqMatches.slice(0, 5).map((r) => {
+    const id = r.match(/id="([^"]+)"/)?.[1] || 'FR-X';
+    const description = extractTextContent(r, 'description') || 'Requirement';
+    const given = extractTextContent(r, 'given') || '';
+    const when = extractTextContent(r, 'when') || '';
+    const then = extractTextContent(r, 'then') || '';
+    return { id, description, given, when, then };
+  });
+
+  return `### 2.6 Functional Requirements Summary
+
+**Total Requirements:** ${totalReqs}
+
+#### Sample Requirements (Given/When/Then Format)
+
+${sampleReqs.map((r) => `**${r.id}: ${r.description}**
+- **Given:** ${r.given || 'N/A'}
+- **When:** ${r.when || 'N/A'}
+- **Then:** ${r.then || 'N/A'}
+`).join('\n')}
+
+${totalReqs > 5 ? `> _...and ${totalReqs - 5} more requirements_` : ''}
+`;
+}
+
+/**
+ * Format Edge Cases Summary subsection
+ */
+function formatEdgeCasesSummary(xml: string): string {
+  const edgeCaseMatches = xml.match(/<edgeCase[^>]*>([\s\S]*?)<\/edgeCase>/g) || [];
+  const totalEdgeCases = edgeCaseMatches.length;
+
+  if (totalEdgeCases === 0) {
+    return `### 2.7 Edge Cases Summary
+
+> No edge cases defined.
+`;
+  }
+
+  // Categorize by severity
+  const critical = edgeCaseMatches.filter((ec) => ec.includes('severity="critical"')).length;
+  const major = edgeCaseMatches.filter((ec) => ec.includes('severity="major"')).length;
+  const minor = edgeCaseMatches.filter((ec) => ec.includes('severity="minor"')).length;
+
+  // Sample some edge cases
+  const sampleCases = edgeCaseMatches.slice(0, 5).map((ec) => {
+    const severity = ec.match(/severity="([^"]+)"/)?.[1] || 'major';
+    const scenario = extractTextContent(ec, 'scenario') || 'Edge case';
+    const expected = extractTextContent(ec, 'expectedBehavior') || '';
+    return { severity, scenario, expected };
+  });
+
+  return `### 2.7 Edge Cases Summary
+
+**Total Edge Cases:** ${totalEdgeCases}
+
+| Severity | Count |
+|----------|-------|
+| 🔴 Critical | ${critical} |
+| 🟠 Major | ${major} |
+| 🟡 Minor | ${minor} |
+
+#### Sample Edge Cases
+
+${sampleCases.map((ec) => `- **[${ec.severity.toUpperCase()}]** ${ec.scenario}
+  - _Expected: ${ec.expected || 'Not specified'}_
+`).join('\n')}
+
+${totalEdgeCases > 5 ? `> _...and ${totalEdgeCases - 5} more edge cases_` : ''}
+`;
+}
+
+/**
+ * Format Acceptance Criteria Summary subsection
+ */
+function formatAcceptanceCriteriaSummary(xml: string): string {
+  const criteriaMatches = xml.match(/<criterion[^>]*>([\s\S]*?)<\/criterion>/g) || [];
+  const totalCriteria = criteriaMatches.length;
+
+  if (totalCriteria === 0) {
+    return `### 2.8 Acceptance Criteria Summary
+
+> No acceptance criteria defined.
+`;
+  }
+
+  // Categorize by type
+  const functional = criteriaMatches.filter((c) => c.includes('type="functional"')).length;
+  const ui = criteriaMatches.filter((c) => c.includes('type="ui"')).length;
+  const security = criteriaMatches.filter((c) => c.includes('type="security"')).length;
+  const performance = criteriaMatches.filter((c) => c.includes('type="performance"')).length;
+  const accessibility = criteriaMatches.filter((c) => c.includes('type="accessibility"')).length;
+
+  return `### 2.8 Acceptance Criteria Summary
+
+**Total Criteria:** ${totalCriteria}
+
+| Type | Count |
+|------|-------|
+| Functional | ${functional} |
+| UI | ${ui} |
+| Security | ${security} |
+| Performance | ${performance} |
+| Accessibility | ${accessibility} |
+
+> Detailed acceptance criteria are included within each user story above.
+`;
+}
+
+// ============ User Stories Helper Functions ============
+
+/**
+ * Extract text content from XML tag
+ */
+function extractTextContent(xml: string, tagName: string): string | undefined {
+  // Try CDATA first
+  const cdataMatch = xml.match(new RegExp(`<${tagName}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]></${tagName}>`));
+  if (cdataMatch) return cdataMatch[1]?.trim();
+
+  // Try regular content
+  const match = xml.match(new RegExp(`<${tagName}>([^<]*)</${tagName}>`));
+  return match?.[1]?.trim();
+}
+
+/**
+ * Extract list items from XML
+ */
+function extractListItems(xml: string, itemTagName: string): string[] {
+  const items: string[] = [];
+  const regex = new RegExp(`<${itemTagName}[^>]*>([^<]*)</${itemTagName}>`, 'g');
+  let match;
+
+  while ((match = regex.exec(xml)) !== null) {
+    const text = match[1]?.trim();
+    if (text) {
+      items.push(text);
+    }
+  }
+
+  return items;
+}
+
+/**
+ * Format priority for display
+ */
+function formatPriority(priority: string): string {
+  const priorityMap: Record<string, string> = {
+    critical: '🔴 Critical',
+    must_have: '🔴 Must Have',
+    high: '🟠 High',
+    should_have: '🟠 Should Have',
+    medium: '🟡 Medium',
+    nice_to_have: '🟡 Nice to Have',
+    low: '🟢 Low',
+    later: '⚪ Later',
+  };
+  return priorityMap[priority.toLowerCase()] || priority;
+}
+
+/**
  * Build Database Schema section
  */
 function buildDatabaseSection(databaseXml: string): string {
   if (!databaseXml) {
-    return `## 2. Database Schema
+    return `## 3. Database Schema
 
 > Database schema not generated.
 
@@ -125,19 +617,19 @@ function buildDatabaseSection(databaseXml: string): string {
 `;
   }
 
-  return `## 2. Database Schema
+  return `## 3. Database Schema
 
-### 2.1 Schema Definition (XML)
+### 3.1 Schema Definition (XML)
 
 \`\`\`xml
 ${databaseXml}
 \`\`\`
 
-### 2.2 Entity Summary
+### 3.2 Entity Summary
 
 ${extractEntitySummary(databaseXml)}
 
-### 2.3 Relationships
+### 3.3 Relationships
 
 ${extractRelationshipSummary(databaseXml)}
 
@@ -150,7 +642,7 @@ ${extractRelationshipSummary(databaseXml)}
  */
 function buildAPISection(backendXml: string): string {
   if (!backendXml) {
-    return `## 3. API Documentation
+    return `## 4. API Documentation
 
 > API documentation not generated.
 
@@ -158,19 +650,19 @@ function buildAPISection(backendXml: string): string {
 `;
   }
 
-  return `## 3. API Documentation
+  return `## 4. API Documentation
 
-### 3.1 Architecture (XML)
+### 4.1 Architecture (XML)
 
 \`\`\`xml
 ${backendXml}
 \`\`\`
 
-### 3.2 Endpoint Summary
+### 4.2 Endpoint Summary
 
 ${extractEndpointSummary(backendXml)}
 
-### 3.3 Authentication
+### 4.3 Authentication
 
 ${extractAuthSummary(backendXml)}
 
@@ -183,7 +675,7 @@ ${extractAuthSummary(backendXml)}
  */
 function buildSecuritySection(securityXml: string): string {
   if (!securityXml) {
-    return `## 4. Security Recommendations
+    return `## 5. Security Recommendations
 
 > Security recommendations not generated.
 
@@ -191,19 +683,19 @@ function buildSecuritySection(securityXml: string): string {
 `;
   }
 
-  return `## 4. Security Recommendations
+  return `## 5. Security Recommendations
 
-### 4.1 Security Configuration (XML)
+### 5.1 Security Configuration (XML)
 
 \`\`\`xml
 ${securityXml}
 \`\`\`
 
-### 4.2 OWASP Coverage
+### 5.2 OWASP Coverage
 
 ${extractOwaspSummary(securityXml)}
 
-### 4.3 Data Protection
+### 5.3 Data Protection
 
 ${extractDataProtectionSummary(securityXml)}
 
@@ -216,7 +708,7 @@ ${extractDataProtectionSummary(securityXml)}
  */
 function buildTestingSection(testingXml: string): string {
   if (!testingXml) {
-    return `## 5. Testing Strategy
+    return `## 6. Testing Strategy
 
 > Testing strategy not generated.
 
@@ -224,15 +716,15 @@ function buildTestingSection(testingXml: string): string {
 `;
   }
 
-  return `## 5. Testing Strategy
+  return `## 6. Testing Strategy
 
-### 5.1 Testing Configuration (XML)
+### 6.1 Testing Configuration (XML)
 
 \`\`\`xml
 ${testingXml}
 \`\`\`
 
-### 5.2 Test Suites
+### 6.2 Test Suites
 
 ${extractTestSuitesSummary(testingXml)}
 
@@ -245,7 +737,7 @@ ${extractTestSuitesSummary(testingXml)}
  */
 function buildDevOpsSection(devopsXml: string): string {
   if (!devopsXml) {
-    return `## 6. DevOps Configuration
+    return `## 7. DevOps Configuration
 
 > DevOps configuration not generated.
 
@@ -253,19 +745,19 @@ function buildDevOpsSection(devopsXml: string): string {
 `;
   }
 
-  return `## 6. DevOps Configuration
+  return `## 7. DevOps Configuration
 
-### 6.1 DevOps Configuration (XML)
+### 7.1 DevOps Configuration (XML)
 
 \`\`\`xml
 ${devopsXml}
 \`\`\`
 
-### 6.2 Services
+### 7.2 Services
 
 ${extractServicesSummary(devopsXml)}
 
-### 6.3 Hosting Recommendations
+### 7.3 Hosting Recommendations
 
 ${extractHostingSummary(devopsXml)}
 
@@ -277,7 +769,7 @@ ${extractHostingSummary(devopsXml)}
  * Build Tech Stack section
  */
 function buildTechStackSection(): string {
-  return `## 7. Tech Stack Summary
+  return `## 8. Tech Stack Summary
 
 | Layer | Technology |
 |-------|------------|
@@ -301,7 +793,7 @@ function buildValidationReportSection(
   scores: { completeness: number; consistency: number; security: number; implementability: number; overall: number },
   qaIterations: number
 ): string {
-  return `## 8. Validation Report
+  return `## 9. Validation Report
 
 | Metric | Score |
 |--------|-------|

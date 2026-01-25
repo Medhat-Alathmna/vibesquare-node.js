@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import * as analyzeController from './analyze.controller';
 import { validate } from '../../middleware/validation.middleware';
-import { authenticate } from '../../middleware/auth.middleware';
+import { optionalAuth } from '../../middleware/auth.middleware';
 import * as analyzeValidator from './analyze.validator';
 
 const router = Router();
@@ -45,7 +45,7 @@ router.post('/',
  * @returns {object} Response.metadata - Analysis metadata
  */
 router.post('/v2',
-  // authenticate(),
+  optionalAuth(),
   validate(analyzeValidator.analyzeUrlV2),
   analyzeController.analyzeUrlV2
 );
@@ -80,7 +80,7 @@ router.post('/v2',
  * @returns {object} Response.metadata - Processing metadata (timing, validation score, QA status)
  */
 router.post('/v2.5',
-  // authenticate(),
+  optionalAuth(),
   validate(analyzeValidator.analyzeUrlV25),
   analyzeController.analyzeUrlV25
 );
