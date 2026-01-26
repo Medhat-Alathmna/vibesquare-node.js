@@ -25,6 +25,9 @@ import {
   ProductGoal,
   ProductNonGoal,
   SuccessMetric,
+  BusinessValue,
+  PrioritizationScore,
+  RoadmapPhase,
 } from '../../core/technical-agent.types';
 import { TECHNICAL_AGENT_CONFIGS } from '../../core/technical-agent-config';
 
@@ -367,6 +370,17 @@ Output valid XML with root <userStories> element containing all 8 sections.`;
     const userFlow = this.extractCDATA(storyXml, 'userFlow') || this.extractText(storyXml, 'userFlow');
     const blockers = this.extractListItems(storyXml, 'blocker') || [];
 
+    // NEW: Parse Business Value
+    const businessValue = this.parseBusinessValue(storyXml);
+
+    // NEW: Parse Roadmap Phase
+    const phaseStr = this.extractText(storyXml, 'phase') || 'mvp';
+    const phase = (['mvp', 'v2', 'v3', 'future'].includes(phaseStr) ? phaseStr : 'mvp') as RoadmapPhase;
+    const phaseRationale = this.extractText(storyXml, 'phaseRationale');
+
+    // NEW: Parse Prioritization Score
+    const prioritizationScore = this.parsePrioritizationScore(storyXml);
+
     return {
       id: storyId,
       title,
@@ -387,6 +401,11 @@ Output valid XML with root <userStories> element containing all 8 sections.`;
       relatedEndpoints,
       uiComponents,
       userFlow,
+      // NEW fields
+      businessValue,
+      phase,
+      phaseRationale,
+      prioritizationScore,
     };
   }
 
@@ -509,6 +528,57 @@ Output valid XML with root <userStories> element containing all 8 sections.`;
     });
 
     return dependencies;
+  }
+
+  /**
+   * Parse business value from story XML
+   */
+  private parseBusinessValue(storyXml: string): BusinessValue | undefined {
+    const bvMatch = storyXml.match(/<businessValue>([\s\S]*?)<\/businessValue>/);
+    if (!bvMatch) return undefined;
+
+    const bvXml = bvMatch[1];
+    const qualitativeValue = this.extractText(bvXml, 'qualitativeValue') || '';
+
+    // If no qualitative value, return undefined
+    if (!qualitativeValue) return undefined;
+
+    return {
+      estimatedTimeSavings: this.extractText(bvXml, 'estimatedTimeSavings'),
+      estimatedCostSavings: this.extractText(bvXml, 'estimatedCostSavings'),
+      revenueImpact: this.extractText(bvXml, 'revenueImpact'),
+      qualitativeValue,
+    };
+  }
+
+  /**
+   * Parse prioritization score from story XML
+   */
+  private parsePrioritizationScore(storyXml: string): PrioritizationScore | undefined {
+    const psMatch = storyXml.match(/<prioritizationScore[^>]*>/);
+    if (!psMatch) return undefined;
+
+    const psXml = psMatch[0];
+    const businessImpact = parseInt(this.getAttribute(psXml, 'businessImpact') || '5', 10);
+    const userImpact = parseInt(this.getAttribute(psXml, 'userImpact') || '5', 10);
+    const technicalComplexity = parseInt(this.getAttribute(psXml, 'technicalComplexity') || '5', 10);
+    const moscowCategoryRaw = this.getAttribute(psXml, 'moscowCategory') || 'should';
+    const moscowCategory = (['must', 'should', 'could', 'wont'].includes(moscowCategoryRaw)
+      ? moscowCategoryRaw
+      : 'should') as 'must' | 'should' | 'could' | 'wont';
+
+    // Calculate WSJF score
+    const wsjfScore = technicalComplexity > 0
+      ? (businessImpact + userImpact) / technicalComplexity
+      : 0;
+
+    return {
+      businessImpact: Math.min(Math.max(businessImpact, 1), 10),
+      userImpact: Math.min(Math.max(userImpact, 1), 10),
+      technicalComplexity: Math.min(Math.max(technicalComplexity, 1), 10),
+      moscowCategory,
+      wsjfScore: Math.round(wsjfScore * 100) / 100,
+    };
   }
 
   /**

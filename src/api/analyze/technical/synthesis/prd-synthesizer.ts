@@ -9,6 +9,8 @@ import {
   TechnicalPipelineResult,
   VisualPipelineResult,
   DetailLevel,
+  ProductIdentity,
+  CONFIDENCE_THRESHOLDS,
 } from '../core/technical-agent.types';
 
 /**
@@ -40,31 +42,40 @@ export function synthesizePRD(
 ---
 `);
 
-  // 1. Visual Identity
+  // 1. Product Vision (NEW - from Identity Agent)
+  sections.push(buildProductVisionSection(technicalResult.identity, technicalResult.identityConfidence));
+
+  // 2. Visual Identity
   sections.push(buildVisualIdentitySection(visualResult));
 
-  // 2. Product Requirements & User Stories (NEW)
+  // 3. Product Requirements & User Stories
   sections.push(buildUserStoriesSection(technicalResult.userStories));
 
-  // 3. Database Schema (was 2)
+  // 4. Roadmap & Phasing (NEW)
+  sections.push(buildRoadmapSection(technicalResult.userStories));
+
+  // 5. Database Schema
   sections.push(buildDatabaseSection(technicalResult.databaseSchema));
 
-  // 4. API Documentation (was 3)
+  // 6. API Documentation
   sections.push(buildAPISection(technicalResult.backendArchitecture));
 
-  // 5. Security Recommendations (was 4)
+  // 7. Security Recommendations
   sections.push(buildSecuritySection(technicalResult.securityRecommendations));
 
-  // 6. Testing Strategy (was 5)
+  // 8. Testing Strategy
   sections.push(buildTestingSection(technicalResult.testingStrategy));
 
-  // 7. DevOps Configuration (was 6)
+  // 9. DevOps Configuration
   sections.push(buildDevOpsSection(technicalResult.devopsConfig));
 
-  // 8. Tech Stack Summary (was 7)
+  // 10. Tech Stack Summary
   sections.push(buildTechStackSection());
 
-  // 9. Validation Report (was 8)
+  // 11. Confidence Analysis (NEW)
+  sections.push(buildConfidenceSection(technicalResult.confidence));
+
+  // 12. Validation Report
   sections.push(buildValidationReportSection(validationScores, qaIterations));
 
   // Footer
@@ -80,6 +91,100 @@ export function synthesizePRD(
 }
 
 /**
+ * Build Product Vision section (from Identity Agent)
+ */
+function buildProductVisionSection(identity: ProductIdentity | undefined, confidence?: number): string {
+  if (!identity) {
+    return `## 1. Product Vision
+
+> Product identity not generated.
+
+---
+`;
+  }
+
+  const { vision, problemStatement, valueProposition, aiCoderContext } = identity;
+
+  return `## 1. Product Vision
+
+${confidence ? `> **Analysis Confidence:** ${confidence}%` : ''}
+
+### 1.1 Vision Statement
+
+${vision.statement}
+
+**Future State:** ${vision.futureState}
+
+**User Transformation:** ${vision.transformation}
+
+${vision.timeframe ? `**Timeframe:** ${vision.timeframe}` : ''}
+
+### 1.2 Problem Statement
+
+**Core Problem:** ${problemStatement.coreProblem}
+
+**Affected Segments:**
+${problemStatement.affectedSegments.length > 0
+    ? problemStatement.affectedSegments
+        .map((seg) => `- **${seg.name}**${seg.size ? ` (${seg.size})` : ''} - Pain Level: ${'🔴'.repeat(Math.min(Math.ceil(seg.painLevel / 2), 5))} (${seg.painLevel}/10)`)
+        .join('\n')
+    : '- Not specified'}
+
+**Cost of Inaction:** ${problemStatement.costOfInaction}
+
+${problemStatement.existingSolutions ? `**Existing Solutions:** ${problemStatement.existingSolutions}` : ''}
+
+### 1.3 Value Proposition
+
+**Unique Value:** ${valueProposition.uniqueValue}
+
+**Target Audience:** ${valueProposition.targetAudience}
+
+${valueProposition.competitiveAdvantage ? `**Competitive Advantage:** ${valueProposition.competitiveAdvantage}` : ''}
+
+**Key Benefits:**
+${valueProposition.keyBenefits.length > 0
+    ? valueProposition.keyBenefits.map((b) => `- **${b.name}:** ${b.impact}`).join('\n')
+    : '- Not specified'}
+
+### 1.4 AI Coder Context
+
+> This section helps AI coding assistants (Claude, Cursor, Copilot) understand the product quickly.
+
+**Product Summary:**
+${aiCoderContext.productSummary}
+
+**Technical Spirit:** ${formatTechnicalSpirit(aiCoderContext.technicalSpirit)}
+
+**Core Domain Entities:**
+${aiCoderContext.coreEntities.length > 0 ? aiCoderContext.coreEntities.map((e) => `- \`${e}\``).join('\n') : '- Not specified'}
+
+**Critical User Flows:**
+${aiCoderContext.criticalFlows.length > 0 ? aiCoderContext.criticalFlows.map((f, i) => `${i + 1}. ${f}`).join('\n') : '- Not specified'}
+
+${aiCoderContext.constraints.length > 0
+    ? `**Constraints:**
+${aiCoderContext.constraints.map((c) => `- ⚠️ ${c}`).join('\n')}`
+    : ''}
+
+---
+`;
+}
+
+/**
+ * Format technical spirit for display
+ */
+function formatTechnicalSpirit(spirit: string): string {
+  const spiritMap: Record<string, string> = {
+    modern: '🚀 Modern (Latest tech, cutting-edge patterns)',
+    startup: '⚡ Startup (Fast iteration, MVP-focused)',
+    enterprise: '🏢 Enterprise (Stable, well-documented, scalable)',
+    legacy: '🔧 Legacy (Compatibility-focused, gradual migration)',
+  };
+  return spiritMap[spirit] || spirit;
+}
+
+/**
  * Build Visual Identity section
  */
 function buildVisualIdentitySection(visual: VisualPipelineResult): string {
@@ -87,9 +192,9 @@ function buildVisualIdentitySection(visual: VisualPipelineResult): string {
   const fonts = visual.designSystem?.fonts || {};
   const tone = visual.designSystem?.visualTone || 'modern';
 
-  return `## 1. Visual Identity
+  return `## 2. Visual Identity
 
-### 1.1 Color Palette
+### 2.1 Color Palette
 | Role | Color |
 |------|-------|
 | Primary | ${colors.primary || '#2563EB'} |
@@ -98,20 +203,20 @@ function buildVisualIdentitySection(visual: VisualPipelineResult): string {
 | Background | ${colors.background || '#FFFFFF'} |
 | Text | ${colors.text || '#1F2937'} |
 
-### 1.2 Typography
+### 2.2 Typography
 - **Headings:** ${fonts.heading || 'Inter'}
 - **Body:** ${fonts.body || 'System UI'}
 
-### 1.3 Visual Tone
+### 2.3 Visual Tone
 ${tone}
 
-### 1.4 Layout Summary
+### 2.4 Layout Summary
 ${visual.layoutAnalysis?.layoutPattern || 'Standard responsive layout'}
 
-### 1.5 Components Detected
+### 2.5 Components Detected
 ${visual.componentIdentification?.components?.map((c) => `- ${c.type}: ${c.count} instance(s)`).join('\n') || '- Standard UI components'}
 
-### 1.6 UI/UX Implementation Prompt
+### 2.6 UI/UX Implementation Prompt
 
 \`\`\`
 ${visual.finalPrompt || 'Visual prompt not available.'}
@@ -126,7 +231,7 @@ ${visual.finalPrompt || 'Visual prompt not available.'}
  */
 function buildUserStoriesSection(userStoriesXml: string): string {
   if (!userStoriesXml) {
-    return `## 2. Product Requirements & User Stories
+    return `## 3. Product Requirements & User Stories
 
 > User stories not generated.
 
@@ -160,7 +265,7 @@ function buildUserStoriesSection(userStoriesXml: string): string {
   // 2.8 Acceptance Criteria Summary
   sections.push(formatAcceptanceCriteriaSummary(userStoriesXml));
 
-  return `## 2. Product Requirements & User Stories
+  return `## 3. Product Requirements & User Stories
 
 ${sections.join('\n')}
 
@@ -174,7 +279,7 @@ ${sections.join('\n')}
 function formatBackground(xml: string): string {
   const backgroundMatch = xml.match(/<background>([\s\S]*?)<\/background>/);
   if (!backgroundMatch) {
-    return `### 2.1 Background/Overview
+    return `### 3.1 Background/Overview
 
 > Background information not available.
 `;
@@ -184,7 +289,7 @@ function formatBackground(xml: string): string {
   const isNewFeature = extractTextContent(backgroundMatch[1], 'isNewFeature') === 'true';
   const existingContext = extractTextContent(backgroundMatch[1], 'existingContext');
 
-  return `### 2.1 Background/Overview
+  return `### 3.1 Background/Overview
 
 ${description}
 
@@ -199,7 +304,7 @@ ${existingContext ? `**Existing Context:** ${existingContext}` : ''}
 function formatProblemStatement(xml: string): string {
   const problemMatch = xml.match(/<problemStatement>([\s\S]*?)<\/problemStatement>/);
   if (!problemMatch) {
-    return `### 2.2 Problem Statement
+    return `### 3.2 Problem Statement
 
 > Problem statement not available.
 `;
@@ -210,7 +315,7 @@ function formatProblemStatement(xml: string): string {
   const workarounds = extractListItems(problemMatch[1], 'workaround');
   const impact = extractTextContent(problemMatch[1], 'impactIfNotSolved') || 'Impact not specified.';
 
-  return `### 2.2 Problem Statement
+  return `### 3.2 Problem Statement
 
 **Problem:** ${problem}
 
@@ -230,7 +335,7 @@ ${workarounds.length > 0 ? workarounds.map((w) => `- ${w}`).join('\n') : '- None
 function formatGoalsAndNonGoals(xml: string): string {
   const goalsMatch = xml.match(/<goalsAndNonGoals>([\s\S]*?)<\/goalsAndNonGoals>/);
   if (!goalsMatch) {
-    return `### 2.3 Goals & Non-Goals
+    return `### 3.3 Goals & Non-Goals
 
 > Goals and non-goals not available.
 `;
@@ -264,7 +369,7 @@ function formatGoalsAndNonGoals(xml: string): string {
     return { name, target, method, baseline };
   });
 
-  return `### 2.3 Goals & Non-Goals
+  return `### 3.3 Goals & Non-Goals
 
 #### Goals
 ${goals.length > 0
@@ -291,7 +396,7 @@ ${metrics.map((m) => `| ${m.name} | ${m.target} | ${m.method} | ${m.baseline} |`
 function formatPersonas(xml: string): string {
   const personasMatch = xml.match(/<personas>([\s\S]*?)<\/personas>/);
   if (!personasMatch) {
-    return `### 2.4 User Personas
+    return `### 3.4 User Personas
 
 > User personas not available.
 `;
@@ -300,7 +405,7 @@ function formatPersonas(xml: string): string {
   const personaMatches = personasMatch[1].match(/<persona[^>]*>([\s\S]*?)<\/persona>/g) || [];
 
   if (personaMatches.length === 0) {
-    return `### 2.4 User Personas
+    return `### 3.4 User Personas
 
 > No personas defined.
 `;
@@ -331,7 +436,7 @@ ${quotation ? `> "${quotation}"` : ''}
 `;
   });
 
-  return `### 2.4 User Personas
+  return `### 3.4 User Personas
 
 ${personas.join('\n---\n\n')}
 `;
@@ -343,7 +448,7 @@ ${personas.join('\n---\n\n')}
 function formatEpicFeatureStoryHierarchy(xml: string): string {
   const epicsMatch = xml.match(/<epics>([\s\S]*?)<\/epics>/);
   if (!epicsMatch) {
-    return `### 2.5 Epic → Feature → Story Breakdown
+    return `### 3.5 Epic → Feature → Story Breakdown
 
 > User stories hierarchy not available.
 `;
@@ -352,7 +457,7 @@ function formatEpicFeatureStoryHierarchy(xml: string): string {
   const epicMatches = epicsMatch[1].match(/<epic[^>]*>([\s\S]*?)<\/epic>/g) || [];
 
   if (epicMatches.length === 0) {
-    return `### 2.5 Epic → Feature → Story Breakdown
+    return `### 3.5 Epic → Feature → Story Breakdown
 
 > No epics defined.
 `;
@@ -429,7 +534,7 @@ ${featuresOutput || '> No features defined'}
 `;
   }).join('\n\n---\n\n');
 
-  return `### 2.5 Epic → Feature → Story Breakdown
+  return `### 3.5 Epic → Feature → Story Breakdown
 
 ${output}
 `;
@@ -444,7 +549,7 @@ function formatFunctionalRequirementsSummary(xml: string): string {
   const totalReqs = reqMatches.length;
 
   if (totalReqs === 0) {
-    return `### 2.6 Functional Requirements Summary
+    return `### 3.6 Functional Requirements Summary
 
 > No functional requirements defined.
 `;
@@ -460,7 +565,7 @@ function formatFunctionalRequirementsSummary(xml: string): string {
     return { id, description, given, when, then };
   });
 
-  return `### 2.6 Functional Requirements Summary
+  return `### 3.6 Functional Requirements Summary
 
 **Total Requirements:** ${totalReqs}
 
@@ -484,7 +589,7 @@ function formatEdgeCasesSummary(xml: string): string {
   const totalEdgeCases = edgeCaseMatches.length;
 
   if (totalEdgeCases === 0) {
-    return `### 2.7 Edge Cases Summary
+    return `### 3.7 Edge Cases Summary
 
 > No edge cases defined.
 `;
@@ -503,7 +608,7 @@ function formatEdgeCasesSummary(xml: string): string {
     return { severity, scenario, expected };
   });
 
-  return `### 2.7 Edge Cases Summary
+  return `### 3.7 Edge Cases Summary
 
 **Total Edge Cases:** ${totalEdgeCases}
 
@@ -531,7 +636,7 @@ function formatAcceptanceCriteriaSummary(xml: string): string {
   const totalCriteria = criteriaMatches.length;
 
   if (totalCriteria === 0) {
-    return `### 2.8 Acceptance Criteria Summary
+    return `### 3.8 Acceptance Criteria Summary
 
 > No acceptance criteria defined.
 `;
@@ -544,7 +649,7 @@ function formatAcceptanceCriteriaSummary(xml: string): string {
   const performance = criteriaMatches.filter((c) => c.includes('type="performance"')).length;
   const accessibility = criteriaMatches.filter((c) => c.includes('type="accessibility"')).length;
 
-  return `### 2.8 Acceptance Criteria Summary
+  return `### 3.8 Acceptance Criteria Summary
 
 **Total Criteria:** ${totalCriteria}
 
@@ -611,11 +716,103 @@ function formatPriority(priority: string): string {
 }
 
 /**
+ * Build Roadmap & Phasing section
+ */
+function buildRoadmapSection(userStoriesXml: string): string {
+  if (!userStoriesXml) {
+    return `## 4. Roadmap & Phasing
+
+> Roadmap not generated.
+
+---
+`;
+  }
+
+  // Parse stories with phase information
+  const storyMatches = userStoriesXml.match(/<story[^>]*>([\s\S]*?)<\/story>/g) || [];
+
+  const phaseGroups: Record<string, Array<{ id: string; title: string; priority: string; businessValue: string }>> = {
+    mvp: [],
+    v2: [],
+    v3: [],
+    future: [],
+  };
+
+  storyMatches.forEach((storyXml) => {
+    const id = storyXml.match(/id="([^"]+)"/)?.[1] || 'US-XXX';
+    const titleMatch = storyXml.match(/<title>([^<]*)<\/title>/);
+    const title = titleMatch?.[1] || 'Untitled Story';
+    const priority = storyXml.match(/priority="([^"]+)"/)?.[1] || 'medium';
+
+    // Extract phase
+    const phaseMatch = storyXml.match(/<phase>([^<]*)<\/phase>/);
+    const phase = phaseMatch?.[1]?.toLowerCase() || 'mvp';
+
+    // Extract business value (qualitative)
+    const bvMatch = storyXml.match(/<businessValue>([\s\S]*?)<\/businessValue>/);
+    const qualitativeValue = bvMatch
+      ? (bvMatch[1].match(/<qualitativeValue>([^<]*)<\/qualitativeValue>/)?.[1] || 'Value not specified')
+      : 'Value not specified';
+
+    if (phaseGroups[phase]) {
+      phaseGroups[phase].push({ id, title, priority, businessValue: qualitativeValue });
+    } else {
+      phaseGroups.mvp.push({ id, title, priority, businessValue: qualitativeValue });
+    }
+  });
+
+  const totalStories = storyMatches.length;
+  const mvpCount = phaseGroups.mvp.length;
+  const v2Count = phaseGroups.v2.length;
+  const v3Count = phaseGroups.v3.length;
+  const futureCount = phaseGroups.future.length;
+
+  return `## 4. Roadmap & Phasing
+
+### 4.1 Release Overview
+
+| Phase | Story Count | Percentage |
+|-------|-------------|------------|
+| 🚀 **MVP** | ${mvpCount} | ${totalStories > 0 ? Math.round((mvpCount / totalStories) * 100) : 0}% |
+| 📈 **V2** | ${v2Count} | ${totalStories > 0 ? Math.round((v2Count / totalStories) * 100) : 0}% |
+| ✨ **V3** | ${v3Count} | ${totalStories > 0 ? Math.round((v3Count / totalStories) * 100) : 0}% |
+| 🔮 **Future** | ${futureCount} | ${totalStories > 0 ? Math.round((futureCount / totalStories) * 100) : 0}% |
+
+### 4.2 MVP Phase (Must Ship)
+
+${phaseGroups.mvp.length > 0
+    ? phaseGroups.mvp.map((s) => `- **${s.id}:** ${s.title} _(${formatPriority(s.priority)})_
+  - _Business Value: ${s.businessValue}_`).join('\n')
+    : '> No MVP stories defined.'}
+
+### 4.3 V2 Phase (Important Improvements)
+
+${phaseGroups.v2.length > 0
+    ? phaseGroups.v2.map((s) => `- **${s.id}:** ${s.title} _(${formatPriority(s.priority)})_`).join('\n')
+    : '> No V2 stories defined.'}
+
+### 4.4 V3 Phase (Nice to Have)
+
+${phaseGroups.v3.length > 0
+    ? phaseGroups.v3.map((s) => `- **${s.id}:** ${s.title}`).join('\n')
+    : '> No V3 stories defined.'}
+
+### 4.5 Future Phase (Backlog)
+
+${phaseGroups.future.length > 0
+    ? phaseGroups.future.map((s) => `- ${s.id}: ${s.title}`).join('\n')
+    : '> No future stories defined.'}
+
+---
+`;
+}
+
+/**
  * Build Database Schema section
  */
 function buildDatabaseSection(databaseXml: string): string {
   if (!databaseXml) {
-    return `## 3. Database Schema
+    return `## 5. Database Schema
 
 > Database schema not generated.
 
@@ -623,19 +820,19 @@ function buildDatabaseSection(databaseXml: string): string {
 `;
   }
 
-  return `## 3. Database Schema
+  return `## 5. Database Schema
 
-### 3.1 Schema Definition (XML)
+### 5.1 Schema Definition (XML)
 
 \`\`\`xml
 ${databaseXml}
 \`\`\`
 
-### 3.2 Entity Summary
+### 5.2 Entity Summary
 
 ${extractEntitySummary(databaseXml)}
 
-### 3.3 Relationships
+### 5.3 Relationships
 
 ${extractRelationshipSummary(databaseXml)}
 
@@ -648,7 +845,7 @@ ${extractRelationshipSummary(databaseXml)}
  */
 function buildAPISection(backendXml: string): string {
   if (!backendXml) {
-    return `## 4. API Documentation
+    return `## 6. API Documentation
 
 > API documentation not generated.
 
@@ -656,19 +853,19 @@ function buildAPISection(backendXml: string): string {
 `;
   }
 
-  return `## 4. API Documentation
+  return `## 6. API Documentation
 
-### 4.1 Architecture (XML)
+### 6.1 Architecture (XML)
 
 \`\`\`xml
 ${backendXml}
 \`\`\`
 
-### 4.2 Endpoint Summary
+### 6.2 Endpoint Summary
 
 ${extractEndpointSummary(backendXml)}
 
-### 4.3 Authentication
+### 6.3 Authentication
 
 ${extractAuthSummary(backendXml)}
 
@@ -681,7 +878,7 @@ ${extractAuthSummary(backendXml)}
  */
 function buildSecuritySection(securityXml: string): string {
   if (!securityXml) {
-    return `## 5. Security Recommendations
+    return `## 7. Security Recommendations
 
 > Security recommendations not generated.
 
@@ -689,19 +886,19 @@ function buildSecuritySection(securityXml: string): string {
 `;
   }
 
-  return `## 5. Security Recommendations
+  return `## 7. Security Recommendations
 
-### 5.1 Security Configuration (XML)
+### 7.1 Security Configuration (XML)
 
 \`\`\`xml
 ${securityXml}
 \`\`\`
 
-### 5.2 OWASP Coverage
+### 7.2 OWASP Coverage
 
 ${extractOwaspSummary(securityXml)}
 
-### 5.3 Data Protection
+### 7.3 Data Protection
 
 ${extractDataProtectionSummary(securityXml)}
 
@@ -714,7 +911,7 @@ ${extractDataProtectionSummary(securityXml)}
  */
 function buildTestingSection(testingXml: string): string {
   if (!testingXml) {
-    return `## 6. Testing Strategy
+    return `## 8. Testing Strategy
 
 > Testing strategy not generated.
 
@@ -722,15 +919,15 @@ function buildTestingSection(testingXml: string): string {
 `;
   }
 
-  return `## 6. Testing Strategy
+  return `## 8. Testing Strategy
 
-### 6.1 Testing Configuration (XML)
+### 8.1 Testing Configuration (XML)
 
 \`\`\`xml
 ${testingXml}
 \`\`\`
 
-### 6.2 Test Suites
+### 8.2 Test Suites
 
 ${extractTestSuitesSummary(testingXml)}
 
@@ -743,7 +940,7 @@ ${extractTestSuitesSummary(testingXml)}
  */
 function buildDevOpsSection(devopsXml: string): string {
   if (!devopsXml) {
-    return `## 7. DevOps Configuration
+    return `## 9. DevOps Configuration
 
 > DevOps configuration not generated.
 
@@ -751,31 +948,176 @@ function buildDevOpsSection(devopsXml: string): string {
 `;
   }
 
-  return `## 7. DevOps Configuration
+  return `## 9. DevOps Configuration
 
-### 7.1 DevOps Configuration (XML)
+### 9.1 DevOps Configuration (XML)
 
 \`\`\`xml
 ${devopsXml}
 \`\`\`
 
-### 7.2 Services
+### 9.2 Services
 
 ${extractServicesSummary(devopsXml)}
 
-### 7.3 Hosting Recommendations
+### 9.3 Hosting Recommendations
 
 ${extractHostingSummary(devopsXml)}
+
+### 9.4 Analytics & KPIs
+
+> Critical for AI Vibe Coders to understand success metrics and tracking requirements.
+
+${extractAnalyticsSummary(devopsXml)}
+
+### 9.5 Observability & Monitoring
+
+${extractObservabilitySummary(devopsXml)}
 
 ---
 `;
 }
 
 /**
+ * Extract Analytics summary from DevOps XML
+ */
+function extractAnalyticsSummary(xml: string): string {
+  const analyticsMatch = xml.match(/<analytics>([\s\S]*?)<\/analytics>/);
+  if (!analyticsMatch) {
+    return '> Analytics not configured.';
+  }
+
+  const analyticsXml = analyticsMatch[1];
+  const sections: string[] = [];
+
+  // Extract KPIs
+  const kpiMatches = analyticsXml.match(/<kpi\s+name="([^"]+)"\s+target="([^"]+)"\s+measurementMethod="([^"]+)"\s+frequency="([^"]+)"/g) || [];
+  if (kpiMatches.length > 0) {
+    sections.push(`#### Key Performance Indicators (KPIs)
+
+| KPI | Target | Measurement | Frequency |
+|-----|--------|-------------|-----------|
+${kpiMatches.map((kpi) => {
+  const name = kpi.match(/name="([^"]+)"/)?.[1] || '';
+  const target = kpi.match(/target="([^"]+)"/)?.[1] || '';
+  const method = kpi.match(/measurementMethod="([^"]+)"/)?.[1] || '';
+  const freq = kpi.match(/frequency="([^"]+)"/)?.[1] || '';
+  return `| ${name} | ${target} | ${method} | ${freq} |`;
+}).join('\n')}`);
+  }
+
+  // Extract Events
+  const eventMatches = analyticsXml.match(/<event\s+name="([^"]+)"\s+trigger="([^"]+)"\s+category="([^"]+)"/g) || [];
+  if (eventMatches.length > 0) {
+    sections.push(`#### Tracking Events
+
+| Event | Trigger | Category |
+|-------|---------|----------|
+${eventMatches.map((event) => {
+  const name = event.match(/name="([^"]+)"/)?.[1] || '';
+  const trigger = event.match(/trigger="([^"]+)"/)?.[1] || '';
+  const category = event.match(/category="([^"]+)"/)?.[1] || '';
+  const categoryIcon = {
+    user_action: '👤',
+    business: '💰',
+    system: '⚙️',
+    error: '❌',
+  }[category] || '📊';
+  return `| ${name} | ${trigger} | ${categoryIcon} ${category} |`;
+}).join('\n')}`);
+  }
+
+  // Extract Dashboards
+  const dashboardMatches = analyticsXml.match(/<dashboard\s+name="([^"]+)"/g) || [];
+  if (dashboardMatches.length > 0) {
+    sections.push(`#### Recommended Dashboards
+
+${dashboardMatches.map((d) => {
+  const name = d.match(/name="([^"]+)"/)?.[1] || '';
+  return `- **${name}**`;
+}).join('\n')}`);
+  }
+
+  return sections.length > 0 ? sections.join('\n\n') : '> Analytics not configured.';
+}
+
+/**
+ * Extract Observability summary from DevOps XML
+ */
+function extractObservabilitySummary(xml: string): string {
+  const obsMatch = xml.match(/<observability>([\s\S]*?)<\/observability>/);
+  if (!obsMatch) {
+    return '> Observability not configured.';
+  }
+
+  const obsXml = obsMatch[1];
+  const sections: string[] = [];
+
+  // Logging
+  const formatMatch = obsXml.match(/<format>([^<]+)<\/format>/);
+  const levelsMatch = obsXml.match(/<levels>([^<]+)<\/levels>/);
+  const retentionMatch = obsXml.match(/<retention>([^<]+)<\/retention>/);
+
+  if (formatMatch || levelsMatch || retentionMatch) {
+    sections.push(`#### Logging Configuration
+
+- **Format:** ${formatMatch?.[1] || 'JSON'}
+- **Levels:** ${levelsMatch?.[1] || 'info, warn, error'}
+- **Retention:** ${retentionMatch?.[1] || '30 days'}`);
+  }
+
+  // SLIs
+  const sliMatches = obsXml.match(/<sli\s+name="([^"]+)"\s+target="([^"]+)"/g) || [];
+  if (sliMatches.length > 0) {
+    sections.push(`#### Service Level Indicators (SLIs)
+
+| SLI | Target |
+|-----|--------|
+${sliMatches.map((sli) => {
+  const name = sli.match(/name="([^"]+)"/)?.[1] || '';
+  const target = sli.match(/target="([^"]+)"/)?.[1] || '';
+  return `| ${name} | ${target} |`;
+}).join('\n')}`);
+  }
+
+  // Alerts
+  const alertMatches = obsXml.match(/<alert\s+name="([^"]+)"\s+severity="([^"]+)"\s+condition="([^"]+)">([\s\S]*?)<\/alert>/g) || [];
+  if (alertMatches.length > 0) {
+    sections.push(`#### Alerting Rules
+
+| Alert | Severity | Condition |
+|-------|----------|-----------|
+${alertMatches.map((alert) => {
+  const name = alert.match(/name="([^"]+)"/)?.[1] || '';
+  const severity = alert.match(/severity="([^"]+)"/)?.[1] || '';
+  const condition = alert.match(/condition="([^"]+)"/)?.[1] || '';
+  const severityIcon = {
+    critical: '🔴',
+    warning: '🟠',
+    info: '🟢',
+  }[severity] || '⚪';
+  return `| ${name} | ${severityIcon} ${severity} | ${condition} |`;
+}).join('\n')}`);
+  }
+
+  // Tracing
+  const providerMatch = obsXml.match(/<tracing>[\s\S]*?<provider>([^<]+)<\/provider>/);
+  const samplingMatch = obsXml.match(/<samplingRate>([^<]+)<\/samplingRate>/);
+  if (providerMatch) {
+    sections.push(`#### Distributed Tracing
+
+- **Provider:** ${providerMatch[1]}
+- **Sampling Rate:** ${samplingMatch?.[1] || '10%'}`);
+  }
+
+  return sections.length > 0 ? sections.join('\n\n') : '> Observability not configured.';
+}
+
+/**
  * Build Tech Stack section
  */
 function buildTechStackSection(): string {
-  return `## 8. Tech Stack Summary
+  return `## 10. Tech Stack Summary
 
 | Layer | Technology |
 |-------|------------|
@@ -793,13 +1135,92 @@ function buildTechStackSection(): string {
 }
 
 /**
+ * Build Confidence Analysis section
+ */
+function buildConfidenceSection(confidence?: {
+  overallScore: number;
+  agentScores: Record<string, number>;
+  lowConfidenceAreas: string[];
+  clarificationNeeded: boolean;
+}): string {
+  if (!confidence) {
+    return `## 11. Confidence Analysis
+
+> Confidence scoring not available for this analysis.
+
+---
+`;
+  }
+
+  const { overallScore, agentScores, lowConfidenceAreas, clarificationNeeded } = confidence;
+
+  // Determine overall confidence level
+  let confidenceLevel: string;
+  let confidenceIcon: string;
+  if (overallScore >= CONFIDENCE_THRESHOLDS.HIGH) {
+    confidenceLevel = 'High';
+    confidenceIcon = '🟢';
+  } else if (overallScore >= CONFIDENCE_THRESHOLDS.REQUIRE_CLARIFICATION) {
+    confidenceLevel = 'Medium';
+    confidenceIcon = '🟡';
+  } else {
+    confidenceLevel = 'Low';
+    confidenceIcon = '🔴';
+  }
+
+  // Build agent scores table
+  const agentScoresTable = Object.entries(agentScores)
+    .map(([agent, score]) => {
+      const icon = score >= 80 ? '🟢' : score >= 70 ? '🟡' : '🔴';
+      const agentName = agent.charAt(0).toUpperCase() + agent.slice(1);
+      return `| ${agentName} | ${icon} ${score}% |`;
+    })
+    .join('\n');
+
+  return `## 11. Confidence Analysis
+
+> This section shows how confident the AI analysis is about each part of the PRD.
+
+### 11.1 Overall Confidence
+
+${confidenceIcon} **${overallScore}%** - ${confidenceLevel} Confidence
+
+${clarificationNeeded ? `⚠️ **Clarification Recommended**: Some areas may benefit from additional context or user input.` : '✅ **Analysis Complete**: Confidence level is acceptable for implementation.'}
+
+### 11.2 Agent Confidence Scores
+
+| Agent | Score |
+|-------|-------|
+${agentScoresTable || '| N/A | N/A |'}
+
+### 11.3 Low Confidence Areas
+
+${lowConfidenceAreas.length > 0
+    ? `The following areas had lower confidence and may need review:
+
+${lowConfidenceAreas.map((area) => `- ⚠️ ${area}`).join('\n')}`
+    : '✅ No significant low-confidence areas identified.'}
+
+### 11.4 Confidence Thresholds
+
+| Level | Threshold | Meaning |
+|-------|-----------|---------|
+| 🟢 High | ≥${CONFIDENCE_THRESHOLDS.HIGH}% | Clear inference from UI, high-quality output |
+| 🟡 Medium | ≥${CONFIDENCE_THRESHOLDS.REQUIRE_CLARIFICATION}% | Reasonable inference, may benefit from review |
+| 🔴 Low | <${CONFIDENCE_THRESHOLDS.REQUIRE_CLARIFICATION}% | Significant inference, recommend clarification |
+
+---
+`;
+}
+
+/**
  * Build Validation Report section
  */
 function buildValidationReportSection(
   scores: { completeness: number; consistency: number; security: number; implementability: number; overall: number },
   qaIterations: number
 ): string {
-  return `## 9. Validation Report
+  return `## 12. Validation Report
 
 | Metric | Score |
 |--------|-------|

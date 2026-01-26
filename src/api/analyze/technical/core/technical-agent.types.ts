@@ -6,7 +6,6 @@
  */
 
 import { z } from 'zod';
-import { AgentOutput, Ambiguity } from '../../agents/core/agent.types';
 
 // ============ Pipeline Options ============
 
@@ -14,6 +13,81 @@ export type PipelineType = 'visual' | 'technical' | 'both';
 export type DetailLevel = 'basic' | 'detailed' | 'comprehensive';
 export type APIStyle = 'REST' | 'GraphQL' | 'REST_GraphQL';
 export type ImplementationPriority = 'must_have' | 'nice_to_have' | 'later';
+export type TechnicalSpirit = 'modern' | 'legacy' | 'enterprise' | 'startup';
+
+// ============ Identity/Vision Types (Layer 0) ============
+
+/**
+ * Product Vision - الرؤية والهدف من المنتج
+ */
+export interface ProductVision {
+  statement: string;        // "أن يصبح أداة قياسية لتحويل التصاميم إلى مستندات تقنية"
+  futureState: string;      // الحالة المستقبلية المثالية
+  transformation: string;   // كيف تتحسن حياة المستخدم
+  timeframe?: string;       // السيناريو المتوقع خلال 3 سنوات
+}
+
+/**
+ * Value Proposition - القيمة المقدمة
+ */
+export interface ValueProposition {
+  uniqueValue: string;      // ما الذي يميز هذا المنتج
+  keyBenefits: Array<{
+    name: string;
+    impact: string;         // التأثير المتوقع (مثل: "توفير 5 ساعات أسبوعياً")
+  }>;
+  competitiveAdvantage?: string;
+  targetAudience: string;
+}
+
+/**
+ * AI Coder Context - السياق الضروري للـ AI Vibe Coder
+ */
+export interface AICoderContext {
+  productSummary: string;   // 2-3 جمل ملخصة للـ context window
+  technicalSpirit: TechnicalSpirit;
+  coreEntities: string[];   // أهم الـ domain objects
+  criticalFlows: string[];  // أهم رحلات المستخدم
+  constraints: string[];    // القيود التي يجب على الـ AI احترامها
+}
+
+/**
+ * Affected Segment - الشريحة المتأثرة بالمشكلة
+ */
+export interface AffectedSegment {
+  name: string;
+  size?: string;
+  painLevel: number;        // 1-10
+}
+
+/**
+ * Identity Problem Statement - تعريف المشكلة
+ */
+export interface IdentityProblemStatement {
+  coreProblem: string;
+  affectedSegments: AffectedSegment[];
+  costOfInaction: string;
+  existingSolutions?: string;
+}
+
+/**
+ * Product Identity - الهوية الكاملة للمنتج
+ */
+export interface ProductIdentity {
+  vision: ProductVision;
+  problemStatement: IdentityProblemStatement;
+  valueProposition: ValueProposition;
+  aiCoderContext: AICoderContext;
+}
+
+/**
+ * Identity Agent Output
+ */
+export interface IdentityAgentOutput {
+  xml: string;
+  identity: ProductIdentity;
+  confidence: number;       // 0-100 درجة الثقة في الاستنتاج
+}
 
 export interface TechnicalPipelineOptions {
   pipelineType: PipelineType;
@@ -75,6 +149,7 @@ export interface TechnicalAgentInput {
   detailLevel: DetailLevel;
   apiStyle?: APIStyle;
   previousOutputs?: {
+    identity?: string; // XML - Layer 0 output
     databaseSchema?: string; // XML
     backendArchitecture?: string; // XML
     securityRecommendations?: string; // XML
@@ -83,6 +158,8 @@ export interface TechnicalAgentInput {
     validationResult?: string; // XML
     userStories?: string; // XML
   };
+  // Parsed identity for quick access (optional)
+  productIdentity?: ProductIdentity;
 }
 
 // ============ Agent Output Types (XML Strings) ============
@@ -129,10 +206,63 @@ export interface TestingAgentOutput {
   coverageTarget: number;
 }
 
+// Analytics KPI Type
+export interface AnalyticsKPI {
+  name: string;
+  target: string;
+  measurementMethod: string;
+  frequency: 'realtime' | 'daily' | 'weekly' | 'monthly';
+}
+
+// Analytics Event Type
+export interface AnalyticsEvent {
+  name: string;
+  trigger: string;
+  properties: Array<{ name: string; type: string }>;
+  category: 'user_action' | 'system' | 'business' | 'error';
+}
+
+// Analytics Dashboard Type
+export interface AnalyticsDashboard {
+  name: string;
+  audience: string;
+  metrics: string[];
+}
+
+// Observability Alerting Type
+export interface ObservabilityAlert {
+  name: string;
+  condition: string;
+  severity: 'critical' | 'warning' | 'info';
+}
+
+// DevOps Analytics Configuration
+export interface DevOpsAnalytics {
+  kpis: AnalyticsKPI[];
+  events: AnalyticsEvent[];
+  dashboards: AnalyticsDashboard[];
+}
+
+// DevOps Observability Configuration
+export interface DevOpsObservability {
+  logging: {
+    format: string;
+    levels: string[];
+    retention: string;
+  };
+  metrics: {
+    provider: string;
+    slis: Array<{ name: string; target: string }>;
+  };
+  alerting: ObservabilityAlert[];
+}
+
 export interface DevOpsAgentOutput {
   xml: string;
   services: string[];
   hostingRecommendations: string[];
+  analytics?: DevOpsAnalytics;
+  observability?: DevOpsObservability;
 }
 
 export interface UserStory {
@@ -255,6 +385,26 @@ export interface StoryDependency {
   reason: string;
 }
 
+// Roadmap Phase Types
+export type RoadmapPhase = 'mvp' | 'v2' | 'v3' | 'future';
+
+// Business Value Types
+export interface BusinessValue {
+  estimatedTimeSavings?: string;  // "5 hours/week"
+  estimatedCostSavings?: string;  // "$200/month"
+  revenueImpact?: string;         // "+15% conversion"
+  qualitativeValue: string;       // Required descriptive value
+}
+
+// Prioritization Score Types
+export interface PrioritizationScore {
+  businessImpact: number;         // 1-10
+  userImpact: number;             // 1-10
+  technicalComplexity: number;    // 1-10
+  moscowCategory: 'must' | 'should' | 'could' | 'wont';
+  wsjfScore?: number;             // (business + user) / complexity
+}
+
 // Enhanced User Story with Full Context
 export interface EnhancedUserStory {
   id: string;
@@ -276,6 +426,11 @@ export interface EnhancedUserStory {
   relatedEndpoints: string[];
   uiComponents: string[];
   userFlow?: string;
+  // NEW: Business Value & Roadmap
+  businessValue?: BusinessValue;
+  phase: RoadmapPhase;
+  phaseRationale?: string;
+  prioritizationScore?: PrioritizationScore;
 }
 
 // Feature Type (Level 2 Hierarchy)
@@ -376,6 +531,8 @@ export interface QAAgentOutput {
 
 export interface TechnicalPipelineResult {
   // Raw XML outputs from each agent
+  identity?: ProductIdentity;  // Layer 0 - Product Identity (parsed)
+  identityConfidence?: number;  // Layer 0 confidence score
   databaseSchema: string;
   backendArchitecture: string;
   securityRecommendations: string;
@@ -387,6 +544,7 @@ export interface TechnicalPipelineResult {
 
   // Parsed summaries
   summaries: {
+    identity: IdentityAgentOutput;  // Layer 0
     database: DatabaseAgentOutput;
     backend: BackendAgentOutput;
     security: SecurityAgentOutput;
@@ -399,6 +557,14 @@ export interface TechnicalPipelineResult {
 
   // Final PRD
   prdMarkdown: string;
+
+  // Confidence Scoring
+  confidence: {
+    overallScore: number;
+    agentScores: Record<string, number>;
+    lowConfidenceAreas: string[];
+    clarificationNeeded: boolean;
+  };
 
   // Metadata
   metadata: {
@@ -419,13 +585,69 @@ export interface TechnicalAgentConfig {
   timeout: number;
   priority: 'critical' | 'high' | 'medium' | 'low';
   retryCount: number;
-  layer: 1 | 2 | 3;
+  layer: 0 | 1 | 2 | 3;  // 0 = Identity (runs first)
   dependencies: string[];
   enableWebSearch: boolean;
   provider?: 'gemini' | 'openrouter';
+  model?: string;  // Override default model for specific agents
 }
 
 // ============ Zod Schemas for Validation ============
+
+// ============ Identity Agent Schemas ============
+
+export const ProductVisionSchema = z.object({
+  statement: z.string(),
+  futureState: z.string(),
+  transformation: z.string(),
+  timeframe: z.string().optional(),
+});
+
+export const ValuePropositionSchema = z.object({
+  uniqueValue: z.string(),
+  keyBenefits: z.array(z.object({
+    name: z.string(),
+    impact: z.string(),
+  })),
+  competitiveAdvantage: z.string().optional(),
+  targetAudience: z.string(),
+});
+
+export const AICoderContextSchema = z.object({
+  productSummary: z.string(),
+  technicalSpirit: z.enum(['modern', 'legacy', 'enterprise', 'startup']),
+  coreEntities: z.array(z.string()),
+  criticalFlows: z.array(z.string()),
+  constraints: z.array(z.string()),
+});
+
+export const AffectedSegmentSchema = z.object({
+  name: z.string(),
+  size: z.string().optional(),
+  painLevel: z.number().min(1).max(10),
+});
+
+export const IdentityProblemStatementSchema = z.object({
+  coreProblem: z.string(),
+  affectedSegments: z.array(AffectedSegmentSchema),
+  costOfInaction: z.string(),
+  existingSolutions: z.string().optional(),
+});
+
+export const ProductIdentitySchema = z.object({
+  vision: ProductVisionSchema,
+  problemStatement: IdentityProblemStatementSchema,
+  valueProposition: ValuePropositionSchema,
+  aiCoderContext: AICoderContextSchema,
+});
+
+export const IdentityAgentOutputSchema = z.object({
+  xml: z.string().min(1),
+  identity: ProductIdentitySchema,
+  confidence: z.number().min(0).max(100),
+});
+
+// ============ Database Agent Schemas ============
 
 export const DatabaseAgentOutputSchema = z.object({
   xml: z.string().min(1),
@@ -588,6 +810,24 @@ export const StoryDependencySchema = z.object({
   reason: z.string(),
 });
 
+// NEW: Business Value & Roadmap Schemas
+export const RoadmapPhaseSchema = z.enum(['mvp', 'v2', 'v3', 'future']);
+
+export const BusinessValueSchema = z.object({
+  estimatedTimeSavings: z.string().optional(),
+  estimatedCostSavings: z.string().optional(),
+  revenueImpact: z.string().optional(),
+  qualitativeValue: z.string(),
+});
+
+export const PrioritizationScoreSchema = z.object({
+  businessImpact: z.number().min(1).max(10),
+  userImpact: z.number().min(1).max(10),
+  technicalComplexity: z.number().min(1).max(10),
+  moscowCategory: z.enum(['must', 'should', 'could', 'wont']),
+  wsjfScore: z.number().optional(),
+});
+
 export const EnhancedUserStorySchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -608,6 +848,11 @@ export const EnhancedUserStorySchema = z.object({
   relatedEndpoints: z.array(z.string()),
   uiComponents: z.array(z.string()),
   userFlow: z.string().optional(),
+  // NEW: Business Value & Roadmap
+  businessValue: BusinessValueSchema.optional(),
+  phase: RoadmapPhaseSchema,
+  phaseRationale: z.string().optional(),
+  prioritizationScore: PrioritizationScoreSchema.optional(),
 });
 
 export const FeatureSchema = z.object({
@@ -706,14 +951,15 @@ export const QAAgentOutputSchema = z.object({
 export type TechnicalAgentStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
 export interface TechnicalAgentStatusMap {
-  database: TechnicalAgentStatus;
-  backend: TechnicalAgentStatus;
-  security: TechnicalAgentStatus;
-  testing: TechnicalAgentStatus;
-  devops: TechnicalAgentStatus;
-  userStory: TechnicalAgentStatus;
-  prdValidator: TechnicalAgentStatus;
-  qa: TechnicalAgentStatus;
+  identity: TechnicalAgentStatus;  // Layer 0
+  database: TechnicalAgentStatus;  // Layer 1
+  backend: TechnicalAgentStatus;   // Layer 2
+  security: TechnicalAgentStatus;  // Layer 2
+  testing: TechnicalAgentStatus;   // Layer 2
+  devops: TechnicalAgentStatus;    // Layer 2
+  userStory: TechnicalAgentStatus; // Layer 2
+  prdValidator: TechnicalAgentStatus;  // Layer 3
+  qa: TechnicalAgentStatus;            // Layer 3
   prdSynthesizer: TechnicalAgentStatus;
 }
 
@@ -725,4 +971,215 @@ export interface TechnicalAgentError {
   type: 'timeout' | 'llm_error' | 'validation_error' | 'xml_parse_error' | 'unknown';
   isCritical: boolean;
   timestamp: Date;
+}
+
+// ============ Confidence Scoring System ============
+
+/**
+ * Confidence levels for agent outputs
+ */
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
+
+/**
+ * Confidence breakdown by section
+ */
+export interface ConfidenceBreakdown {
+  section: string;
+  score: number;  // 0-100
+  level: ConfidenceLevel;
+  reason?: string;
+}
+
+/**
+ * Agent confidence score with breakdown
+ */
+export interface AgentConfidenceScore {
+  agentName: string;
+  overallScore: number;  // 0-100
+  level: ConfidenceLevel;
+  breakdown: ConfidenceBreakdown[];
+  lowConfidenceAreas: string[];  // Areas that need clarification
+  suggestedQuestions: string[];  // Questions to ask user for clarification
+}
+
+/**
+ * Clarification question for low confidence scenarios
+ */
+export interface ClarificationQuestion {
+  id: string;
+  question: string;
+  context: string;  // Why we're asking
+  agentName: string;
+  options?: string[];  // Pre-defined options if applicable
+  priority: 'critical' | 'important' | 'optional';
+}
+
+/**
+ * User response to clarification question
+ */
+export interface ClarificationResponse {
+  questionId: string;
+  answer: string;
+  timestamp: Date;
+}
+
+/**
+ * Pipeline confidence state
+ */
+export interface PipelineConfidenceState {
+  overallConfidence: number;
+  agentConfidences: Record<string, AgentConfidenceScore>;
+  needsClarification: boolean;
+  pendingQuestions: ClarificationQuestion[];
+  resolvedQuestions: ClarificationResponse[];
+  confidenceThreshold: number;  // Default: 70
+}
+
+/**
+ * Confidence score thresholds
+ */
+export const CONFIDENCE_THRESHOLDS = {
+  HIGH: 80,
+  MEDIUM: 50,
+  LOW: 0,
+  REQUIRE_CLARIFICATION: 70,  // Below this, ask user for input
+} as const;
+
+/**
+ * Helper function to determine confidence level from score
+ */
+export function getConfidenceLevel(score: number): ConfidenceLevel {
+  if (score >= CONFIDENCE_THRESHOLDS.HIGH) return 'high';
+  if (score >= CONFIDENCE_THRESHOLDS.MEDIUM) return 'medium';
+  return 'low';
+}
+
+/**
+ * Helper function to check if clarification is needed
+ */
+export function needsClarification(score: number, threshold = CONFIDENCE_THRESHOLDS.REQUIRE_CLARIFICATION): boolean {
+  return score < threshold;
+}
+
+// ============ Model Fallback System ============
+
+/**
+ * Model tier levels (cost & capability order)
+ * NO OPUS - too expensive for this use case
+ */
+export type ModelTier = 'flash' | 'sonnet' | 'gemini-pro';
+
+/**
+ * Model definitions by provider and tier
+ */
+export const MODEL_TIERS: Record<ModelTier, { provider: 'openrouter' | 'gemini'; model: string; costPerMToken: number }> = {
+  flash: {
+    provider: 'gemini',
+    model: 'gemini-2.0-flash',
+    costPerMToken: 0.075,  // Cheapest, use for non-critical agents
+  },
+  sonnet: {
+    provider: 'openrouter',
+    model: 'anthropic/claude-3.5-sonnet',
+    costPerMToken: 3.0,  // Balanced, use for critical agents
+  },
+  'gemini-pro': {
+    provider: 'gemini',
+    model: 'gemini-2.5-pro',
+    costPerMToken: 1.25,  // Alternative to Sonnet
+  },
+};
+
+/**
+ * Agent model preferences (primary and fallback)
+ */
+export interface AgentModelConfig {
+  primary: ModelTier;
+  fallbacks: ModelTier[];  // Order of fallback attempts
+  requireUserApprovalForFallback: boolean;  // If true, ask user before using more expensive model
+}
+
+/**
+ * Default model configs by agent type
+ */
+export const DEFAULT_AGENT_MODEL_CONFIGS: Record<string, AgentModelConfig> = {
+  // Critical agents - Use Sonnet/Gemini Pro for best quality
+  identity: {
+    primary: 'sonnet',
+    fallbacks: ['gemini-pro'],
+    requireUserApprovalForFallback: false,  // Identity is foundational, retry automatically
+  },
+  database: {
+    primary: 'sonnet',
+    fallbacks: ['gemini-pro', 'flash'],
+    requireUserApprovalForFallback: false,
+  },
+  userStory: {
+    primary: 'sonnet',
+    fallbacks: ['gemini-pro'],
+    requireUserApprovalForFallback: false,
+  },
+  backend: {
+    primary: 'sonnet',
+    fallbacks: ['gemini-pro', 'flash'],
+    requireUserApprovalForFallback: false,
+  },
+  prdValidator: {
+    primary: 'sonnet',
+    fallbacks: ['gemini-pro'],
+    requireUserApprovalForFallback: false,
+  },
+  qa: {
+    primary: 'sonnet',
+    fallbacks: ['gemini-pro'],
+    requireUserApprovalForFallback: false,
+  },
+
+  // Non-critical agents - Use Flash for cost savings
+  security: {
+    primary: 'flash',
+    fallbacks: ['sonnet'],
+    requireUserApprovalForFallback: true,  // Ask before using more expensive model
+  },
+  testing: {
+    primary: 'flash',
+    fallbacks: ['sonnet'],
+    requireUserApprovalForFallback: true,
+  },
+  devops: {
+    primary: 'flash',
+    fallbacks: ['sonnet'],
+    requireUserApprovalForFallback: true,
+  },
+};
+
+/**
+ * Model fallback result
+ */
+export interface ModelFallbackResult {
+  modelUsed: ModelTier;
+  attemptedModels: ModelTier[];
+  fallbackOccurred: boolean;
+  userApprovalRequested: boolean;
+  userApproved?: boolean;
+}
+
+/**
+ * Model usage stats for cost tracking
+ */
+export interface ModelUsageStats {
+  agentName: string;
+  modelTier: ModelTier;
+  tokensUsed: number;
+  estimatedCost: number;  // in USD
+}
+
+/**
+ * Pipeline model usage summary
+ */
+export interface PipelineModelUsage {
+  totalTokens: number;
+  totalEstimatedCost: number;
+  agentUsage: ModelUsageStats[];
+  fallbacksOccurred: number;
 }

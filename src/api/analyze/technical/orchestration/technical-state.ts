@@ -13,6 +13,12 @@ import {
   TechnicalAgentStatusMap,
   TechnicalAgentError,
   TechnicalAgentStatus,
+  ProductIdentity,
+  PipelineConfidenceState,
+  ClarificationQuestion,
+  ClarificationResponse,
+  AgentConfidenceScore,
+  CONFIDENCE_THRESHOLDS,
 } from '../core/technical-agent.types';
 
 // ============ State Annotations ============
@@ -54,6 +60,17 @@ export const TechnicalGraphState = Annotation.Root({
   startTime: Annotation<number>({
     reducer: (_, next) => next,
     default: () => Date.now(),
+  }),
+
+  // Layer 0 outputs (Identity)
+  identity: Annotation<ProductIdentity | undefined>({
+    reducer: (_, next) => next,
+    default: () => undefined,
+  }),
+
+  identityConfidence: Annotation<number>({
+    reducer: (_, next) => next,
+    default: () => 0,
   }),
 
   // Layer 1 outputs
@@ -127,6 +144,7 @@ export const TechnicalGraphState = Annotation.Root({
   agentStatus: Annotation<Partial<TechnicalAgentStatusMap>>({
     reducer: (current, next) => ({ ...current, ...next }),
     default: () => ({
+      identity: 'pending',
       database: 'pending',
       backend: 'pending',
       security: 'pending',
@@ -144,6 +162,37 @@ export const TechnicalGraphState = Annotation.Root({
     reducer: (current, next) => current + next,
     default: () => 0,
   }),
+
+  // Confidence Scoring System
+  confidenceState: Annotation<PipelineConfidenceState>({
+    reducer: (current, next) => ({
+      ...current,
+      ...next,
+      agentConfidences: { ...current.agentConfidences, ...next.agentConfidences },
+      pendingQuestions: [...(next.pendingQuestions || current.pendingQuestions)],
+      resolvedQuestions: [...current.resolvedQuestions, ...(next.resolvedQuestions || [])],
+    }),
+    default: () => ({
+      overallConfidence: 0,
+      agentConfidences: {},
+      needsClarification: false,
+      pendingQuestions: [],
+      resolvedQuestions: [],
+      confidenceThreshold: CONFIDENCE_THRESHOLDS.REQUIRE_CLARIFICATION,
+    }),
+  }),
+
+  // Flag to pause for user clarification
+  awaitingClarification: Annotation<boolean>({
+    reducer: (_, next) => next,
+    default: () => false,
+  }),
+
+  // User-provided clarifications
+  userClarifications: Annotation<ClarificationResponse[]>({
+    reducer: (current, next) => [...current, ...next],
+    default: () => [],
+  }),
 });
 
 // Type export for state
@@ -157,13 +206,16 @@ export type TechnicalGraphStateType = typeof TechnicalGraphState.State;
 export function createInitialTechnicalState(
   visualResults: VisualPipelineResult,
   detailLevel: DetailLevel,
-  apiStyle?: APIStyle
+  apiStyle?: APIStyle,
+  confidenceThreshold?: number
 ): TechnicalGraphStateType {
   return {
     visualResults,
     detailLevel,
     apiStyle: apiStyle || 'REST',
     startTime: Date.now(),
+    identity: undefined,
+    identityConfidence: 0,
     databaseSchema: undefined,
     backendArchitecture: undefined,
     securityRecommendations: undefined,
@@ -177,6 +229,7 @@ export function createInitialTechnicalState(
     finalPRD: undefined,
     errors: [],
     agentStatus: {
+      identity: 'pending',
       database: 'pending',
       backend: 'pending',
       security: 'pending',
@@ -188,6 +241,16 @@ export function createInitialTechnicalState(
       prdSynthesizer: 'pending',
     },
     tokenUsage: 0,
+    confidenceState: {
+      overallConfidence: 0,
+      agentConfidences: {},
+      needsClarification: false,
+      pendingQuestions: [],
+      resolvedQuestions: [],
+      confidenceThreshold: confidenceThreshold || CONFIDENCE_THRESHOLDS.REQUIRE_CLARIFICATION,
+    },
+    awaitingClarification: false,
+    userClarifications: [],
   };
 }
 
@@ -195,6 +258,11 @@ export function createInitialTechnicalState(
  * Check if a critical agent has failed
  */
 export function hasCriticalTechnicalAgentFailed(state: TechnicalGraphStateType): boolean {
+  // Identity is critical - it provides foundational context
+  if (state.agentStatus.identity === 'failed') {
+    return true;
+  }
+
   // Database is critical - without it, we can't proceed
   if (state.agentStatus.database === 'failed') {
     return true;
@@ -210,6 +278,7 @@ export function hasCriticalTechnicalAgentFailed(state: TechnicalGraphStateType):
 export function getCompletedTechnicalAgents(state: TechnicalGraphStateType): string[] {
   const completed: string[] = [];
 
+  if (state.agentStatus.identity === 'completed') completed.push('identity');
   if (state.agentStatus.database === 'completed') completed.push('database');
   if (state.agentStatus.backend === 'completed') completed.push('backend');
   if (state.agentStatus.security === 'completed') completed.push('security');
@@ -221,6 +290,28 @@ export function getCompletedTechnicalAgents(state: TechnicalGraphStateType): str
   if (state.agentStatus.prdSynthesizer === 'completed') completed.push('prdSynthesizer');
 
   return completed;
+}
+
+/**
+ * Check if Layer 0 is complete (Identity)
+ */
+export function isLayer0Complete(state: TechnicalGraphStateType): boolean {
+  return (
+    state.agentStatus.identity === 'completed' ||
+    state.agentStatus.identity === 'failed' ||
+    state.agentStatus.identity === 'skipped'
+  );
+}
+
+/**
+ * Check if Layer 1 is complete (Database)
+ */
+export function isLayer1Complete(state: TechnicalGraphStateType): boolean {
+  return (
+    state.agentStatus.database === 'completed' ||
+    state.agentStatus.database === 'failed' ||
+    state.agentStatus.database === 'skipped'
+  );
 }
 
 /**
@@ -254,5 +345,122 @@ export function createTechnicalAgentError(
     type: 'unknown',
     isCritical,
     timestamp: new Date(),
+  };
+}
+
+// ============ Confidence Scoring Helpers ============
+
+/**
+ * Check if any critical agent has low confidence that needs clarification
+ */
+export function needsUserClarification(state: TechnicalGraphStateType): boolean {
+  const { confidenceState } = state;
+
+  // Check if already awaiting clarification
+  if (state.awaitingClarification) {
+    return true;
+  }
+
+  // Check identity confidence (most critical)
+  if (state.identityConfidence > 0 && state.identityConfidence < confidenceState.confidenceThreshold) {
+    return true;
+  }
+
+  // Check all agent confidences
+  for (const [agentName, confidence] of Object.entries(confidenceState.agentConfidences)) {
+    if (confidence.overallScore < confidenceState.confidenceThreshold) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Update agent confidence in state
+ */
+export function updateAgentConfidence(
+  state: TechnicalGraphStateType,
+  agentConfidence: AgentConfidenceScore
+): Partial<TechnicalGraphStateType> {
+  const newAgentConfidences = {
+    ...state.confidenceState.agentConfidences,
+    [agentConfidence.agentName]: agentConfidence,
+  };
+
+  // Calculate overall confidence (weighted average, identity has 2x weight)
+  const weights: Record<string, number> = {
+    identity: 2,
+    database: 1.5,
+    userStory: 1.5,
+    backend: 1,
+    security: 1,
+    testing: 0.5,
+    devops: 0.5,
+  };
+
+  let totalWeight = 0;
+  let weightedSum = 0;
+
+  for (const [name, confidence] of Object.entries(newAgentConfidences)) {
+    const weight = weights[name] || 1;
+    totalWeight += weight;
+    weightedSum += confidence.overallScore * weight;
+  }
+
+  const overallConfidence = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
+
+  // Collect all pending questions from low confidence agents
+  const pendingQuestions: ClarificationQuestion[] = [];
+  for (const [name, confidence] of Object.entries(newAgentConfidences)) {
+    if (confidence.overallScore < state.confidenceState.confidenceThreshold) {
+      confidence.suggestedQuestions.forEach((q, idx) => {
+        pendingQuestions.push({
+          id: `${name}-q${idx}`,
+          question: q,
+          context: confidence.lowConfidenceAreas[idx] || 'Needs clarification',
+          agentName: name,
+          priority: confidence.overallScore < 50 ? 'critical' : 'important',
+        });
+      });
+    }
+  }
+
+  return {
+    confidenceState: {
+      ...state.confidenceState,
+      agentConfidences: newAgentConfidences,
+      overallConfidence,
+      needsClarification: overallConfidence < state.confidenceState.confidenceThreshold,
+      pendingQuestions,
+    },
+  };
+}
+
+/**
+ * Get summary of confidence scores for display
+ */
+export function getConfidenceSummary(state: TechnicalGraphStateType): {
+  overall: number;
+  agents: Array<{ name: string; score: number; level: string }>;
+  lowConfidenceAreas: string[];
+} {
+  const { confidenceState } = state;
+
+  const agents = Object.entries(confidenceState.agentConfidences).map(([name, conf]) => ({
+    name,
+    score: conf.overallScore,
+    level: conf.level,
+  }));
+
+  const lowConfidenceAreas: string[] = [];
+  for (const conf of Object.values(confidenceState.agentConfidences)) {
+    lowConfidenceAreas.push(...conf.lowConfidenceAreas);
+  }
+
+  return {
+    overall: confidenceState.overallConfidence,
+    agents,
+    lowConfidenceAreas,
   };
 }

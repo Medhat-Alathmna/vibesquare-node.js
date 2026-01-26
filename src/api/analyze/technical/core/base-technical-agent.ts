@@ -13,6 +13,11 @@ import {
   TechnicalAgentInput,
   TechnicalAgentError,
   DetailLevel,
+  ModelTier,
+  MODEL_TIERS,
+  DEFAULT_AGENT_MODEL_CONFIGS,
+  ModelFallbackResult,
+  AgentModelConfig,
 } from './technical-agent.types';
 
 // ============ Base Technical Agent Abstract Class ============
@@ -20,10 +25,33 @@ import {
 export abstract class BaseTechnicalAgent<TOutput> {
   protected config: TechnicalAgentConfig;
   protected outputSchema?: ZodSchema<TOutput>;
+  protected modelConfig: AgentModelConfig;
 
   constructor(config: TechnicalAgentConfig, outputSchema?: ZodSchema<TOutput>) {
     this.config = config;
     this.outputSchema = outputSchema;
+
+    // Get model config for this agent, or use default
+    const agentKey = config.name.replace('Agent', '').toLowerCase();
+    this.modelConfig = DEFAULT_AGENT_MODEL_CONFIGS[agentKey] || {
+      primary: 'sonnet',
+      fallbacks: ['gemini-pro', 'flash'],
+      requireUserApprovalForFallback: false,
+    };
+  }
+
+  /**
+   * Get the model tier configuration for a specific tier
+   */
+  protected getModelTierConfig(tier: ModelTier) {
+    return MODEL_TIERS[tier];
+  }
+
+  /**
+   * Get all models to try (primary + fallbacks)
+   */
+  protected getModelsToTry(): ModelTier[] {
+    return [this.modelConfig.primary, ...this.modelConfig.fallbacks];
   }
 
   /**
@@ -103,15 +131,21 @@ DETAIL LEVEL: COMPREHENSIVE
   }
 
   /**
-   * Execute the agent
+   * Execute the agent with a specific model tier
    */
-  async execute(input: TechnicalAgentInput): Promise<{
+  async execute(input: TechnicalAgentInput, modelTier?: ModelTier): Promise<{
     data: TOutput;
     xml: string;
     processingTimeMs: number;
     tokenUsage: number;
+    modelUsed: ModelTier;
+    estimatedCost: number;
   }> {
     const startTime = Date.now();
+
+    // Determine which model to use
+    const tier = modelTier || this.modelConfig.primary;
+    const modelConfig = this.getModelTierConfig(tier);
 
     try {
       // Build the prompt with detail level instructions
@@ -119,14 +153,15 @@ DETAIL LEVEL: COMPREHENSIVE
       const userPrompt = this.buildUserPrompt(input);
       const fullPrompt = `${detailInstructions}\n\n${userPrompt}`;
 
-      // Call the LLM
+      // Call the LLM with specified model
       const result = await llmProvider.call({
         agentName: this.config.name,
         systemPrompt: this.config.systemPrompt,
         userPrompt: fullPrompt,
         maxTokens: this.config.maxTokens,
         timeout: this.config.timeout,
-        provider: this.config.provider,
+        provider: modelConfig.provider,
+        model: modelConfig.model,
       });
 
       // Extract XML from response
@@ -139,12 +174,15 @@ DETAIL LEVEL: COMPREHENSIVE
       const validated = this.validateOutput(parsed);
 
       const processingTimeMs = Date.now() - startTime;
+      const estimatedCost = (result.tokenUsage.total / 1_000_000) * modelConfig.costPerMToken;
 
       return {
         data: validated,
         xml: xmlContent,
         processingTimeMs,
         tokenUsage: result.tokenUsage.total,
+        modelUsed: tier,
+        estimatedCost,
       };
     } catch (error: unknown) {
       const processingTimeMs = Date.now() - startTime;
@@ -152,7 +190,7 @@ DETAIL LEVEL: COMPREHENSIVE
       if (error instanceof LLMProviderError) {
         throw new TechnicalAgentExecutionError(
           this.config.name,
-          `LLM call failed: ${error.message}`,
+          `LLM call failed (${tier}): ${error.message}`,
           error.code === 'TIMEOUT' ? 'timeout' : 'llm_error',
           this.isCritical
         );
@@ -216,47 +254,124 @@ DETAIL LEVEL: COMPREHENSIVE
   }
 
   /**
-   * Retry logic for failed executions
+   * Retry logic for failed executions with model fallback support
    */
   async executeWithRetry(
     input: TechnicalAgentInput,
-    maxRetries: number = this.config.retryCount
+    maxRetries: number = this.config.retryCount,
+    options?: {
+      enableModelFallback?: boolean;
+      onFallbackRequested?: (fromModel: ModelTier, toModel: ModelTier) => Promise<boolean>;
+    }
   ): Promise<{
     data: TOutput;
     xml: string;
     processingTimeMs: number;
     tokenUsage: number;
+    modelUsed?: ModelTier;
+    estimatedCost?: number;
+    fallbackResult?: ModelFallbackResult;
   }> {
+    const enableFallback = options?.enableModelFallback ?? true;
+    const modelsToTry = enableFallback ? this.getModelsToTry() : [this.modelConfig.primary];
+    const attemptedModels: ModelTier[] = [];
     let lastError: Error | null = null;
+    let userApprovalRequested = false;
+    let userApproved = true;
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        return await this.execute(input);
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error('Unknown error');
+    // Try each model tier
+    for (const modelTier of modelsToTry) {
+      attemptedModels.push(modelTier);
 
-        // Don't retry on validation errors
-        if (
-          error instanceof TechnicalAgentExecutionError &&
-          error.type === 'validation_error'
-        ) {
-          throw error;
-        }
+      // Check if we need user approval for fallback (upgrading to more expensive model)
+      if (
+        attemptedModels.length > 1 &&
+        this.modelConfig.requireUserApprovalForFallback &&
+        options?.onFallbackRequested
+      ) {
+        const previousModel = attemptedModels[attemptedModels.length - 2];
+        const previousCost = MODEL_TIERS[previousModel].costPerMToken;
+        const currentCost = MODEL_TIERS[modelTier].costPerMToken;
 
-        console.log(
-          `[${this.config.name}] Attempt ${attempt + 1}/${maxRetries + 1} failed: ${lastError.message}`
-        );
+        // If upgrading to more expensive model, ask for approval
+        if (currentCost > previousCost) {
+          userApprovalRequested = true;
+          userApproved = await options.onFallbackRequested(previousModel, modelTier);
 
-        // Wait before retry (exponential backoff)
-        if (attempt < maxRetries) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.pow(2, attempt) * 1000)
-          );
+          if (!userApproved) {
+            console.log(
+              `[${this.config.name}] User declined fallback from ${previousModel} to ${modelTier}`
+            );
+            continue;  // Skip this model, try next cheaper one if available
+          }
         }
       }
+
+      // Try this model with retries
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const result = await this.execute(input, modelTier);
+
+          // Build fallback result
+          const fallbackResult: ModelFallbackResult = {
+            modelUsed: modelTier,
+            attemptedModels,
+            fallbackOccurred: attemptedModels.length > 1,
+            userApprovalRequested,
+            userApproved: userApprovalRequested ? userApproved : undefined,
+          };
+
+          return {
+            ...result,
+            fallbackResult,
+          };
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error('Unknown error');
+
+          // Don't retry on validation errors - they won't be fixed by retry
+          if (
+            error instanceof TechnicalAgentExecutionError &&
+            error.type === 'validation_error'
+          ) {
+            throw error;
+          }
+
+          console.log(
+            `[${this.config.name}] Model ${modelTier}, attempt ${attempt + 1}/${maxRetries + 1} failed: ${lastError.message}`
+          );
+
+          // Wait before retry (exponential backoff)
+          if (attempt < maxRetries) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, Math.pow(2, attempt) * 1000)
+            );
+          }
+        }
+      }
+
+      // If we get here, all retries for this model failed
+      console.log(
+        `[${this.config.name}] Model ${modelTier} failed after ${maxRetries + 1} attempts, trying fallback...`
+      );
     }
 
-    throw lastError || new Error('Max retries exceeded');
+    // All models failed
+    throw lastError || new Error('All models and retries exhausted');
+  }
+
+  /**
+   * Get estimated cost for using a specific model tier
+   */
+  getEstimatedCost(tokens: number, tier: ModelTier = this.modelConfig.primary): number {
+    const modelConfig = this.getModelTierConfig(tier);
+    return (tokens / 1_000_000) * modelConfig.costPerMToken;
+  }
+
+  /**
+   * Get model configuration for this agent
+   */
+  getModelConfig(): AgentModelConfig {
+    return this.modelConfig;
   }
 }
 
