@@ -126,6 +126,7 @@ DETAIL LEVEL: COMPREHENSIVE
         userPrompt: fullPrompt,
         maxTokens: this.config.maxTokens,
         timeout: this.config.timeout,
+        provider: this.config.provider,
       });
 
       // Extract XML from response

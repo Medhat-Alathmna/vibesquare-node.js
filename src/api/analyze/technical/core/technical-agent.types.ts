@@ -422,6 +422,7 @@ export interface TechnicalAgentConfig {
   layer: 1 | 2 | 3;
   dependencies: string[];
   enableWebSearch: boolean;
+  provider?: 'gemini' | 'openrouter';
 }
 
 // ============ Zod Schemas for Validation ============

@@ -92,6 +92,39 @@ export const AGENT_MODEL_CONFIGS: Record<string, AgentModelConfig> = {
         gemini: GEMINI_MODELS.userQuestionCollector,
         openrouter: AGENT_MODELS.userQuestionCollector,
     },
+    // Technical Agents (Layer 1-3)
+    DatabaseAgent: {
+        gemini: GEMINI_MODELS.layoutAnalyzer, // Flash
+        openrouter: AGENT_MODELS.layoutAnalyzer, // Flash
+    },
+    BackendAgent: {
+        gemini: GEMINI_MODELS.layoutAnalyzer, // Flash
+        openrouter: AGENT_MODELS.layoutAnalyzer, // Flash
+    },
+    SecurityAgent: {
+        gemini: GEMINI_MODELS.layoutAnalyzer, // Flash
+        openrouter: AGENT_MODELS.layoutAnalyzer, // Flash
+    },
+    TestingAgent: {
+        gemini: GEMINI_MODELS.layoutAnalyzer, // Flash
+        openrouter: AGENT_MODELS.layoutAnalyzer, // Flash
+    },
+    DevOpsAgent: {
+        gemini: GEMINI_MODELS.layoutAnalyzer, // Flash
+        openrouter: AGENT_MODELS.layoutAnalyzer, // Flash
+    },
+    UserStoryAgent: {
+        gemini: GEMINI_MODELS.layoutAnalyzer, // Flash
+        openrouter: AGENT_MODELS.layoutAnalyzer, // Flash
+    },
+    PRDValidatorAgent: {
+        gemini: GEMINI_MODELS.layoutAnalyzer, // Flash
+        openrouter: AGENT_MODELS.layoutAnalyzer, // Flash
+    },
+    QAAgent: {
+        gemini: GEMINI_MODELS.layoutAnalyzer, // Flash
+        openrouter: AGENT_MODELS.layoutAnalyzer, // Flash
+    },
 };
 
 // ============ Provider Utilities ============
