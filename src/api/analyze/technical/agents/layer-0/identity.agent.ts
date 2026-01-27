@@ -42,6 +42,15 @@ class IdentityAgent extends BaseTechnicalAgent<IdentityAgentOutput> {
   protected buildUserPrompt(input: TechnicalAgentInput): string {
     const { visualResults } = input;
 
+    // Validate input
+    if (!visualResults) {
+      throw new Error('visualResults is required but was undefined');
+    }
+
+    if (!visualResults.metadata) {
+      throw new Error('visualResults.metadata is required but was undefined');
+    }
+
     // Extract relevant information from visual analysis
     const components = visualResults.componentIdentification?.components || [];
     const layoutSections = visualResults.layoutAnalysis?.sections || [];
@@ -147,7 +156,7 @@ Rate your confidence in this analysis (0-100).`;
    */
   protected parseXMLOutput(xmlContent: string): IdentityAgentOutput {
     // Parse Vision
-    const visionContent = getXMLElementContent(xmlContent, 'vision');
+    const visionContent = getXMLElementContent(xmlContent, 'vision') || '';
     const vision: ProductVision = {
       statement: getXMLElementContent(visionContent, 'statement') || '',
       futureState: getXMLElementContent(visionContent, 'future_state') || '',
@@ -156,8 +165,8 @@ Rate your confidence in this analysis (0-100).`;
     };
 
     // Parse Problem Statement
-    const problemContent = getXMLElementContent(xmlContent, 'problem_statement');
-    const segmentsContent = getXMLElementContent(problemContent, 'affected_segments');
+    const problemContent = getXMLElementContent(xmlContent, 'problem_statement') || '';
+    const segmentsContent = getXMLElementContent(problemContent, 'affected_segments') || '';
     const segmentElements = getXMLElements(segmentsContent, 'segment');
 
     const affectedSegments: AffectedSegment[] = segmentElements.map((seg) => ({
@@ -174,8 +183,8 @@ Rate your confidence in this analysis (0-100).`;
     };
 
     // Parse Value Proposition
-    const valueContent = getXMLElementContent(xmlContent, 'value_proposition');
-    const benefitsContent = getXMLElementContent(valueContent, 'key_benefits');
+    const valueContent = getXMLElementContent(xmlContent, 'value_proposition') || '';
+    const benefitsContent = getXMLElementContent(valueContent, 'key_benefits') || '';
     const benefitElements = getXMLElements(benefitsContent, 'benefit');
 
     const keyBenefits = benefitElements.map((ben) => ({
@@ -191,20 +200,20 @@ Rate your confidence in this analysis (0-100).`;
     };
 
     // Parse AI Coder Context
-    const aiContent = getXMLElementContent(xmlContent, 'ai_coder_context');
+    const aiContent = getXMLElementContent(xmlContent, 'ai_coder_context') || '';
 
     // Parse core entities
-    const entitiesContent = getXMLElementContent(aiContent, 'core_entities');
+    const entitiesContent = getXMLElementContent(aiContent, 'core_entities') || '';
     const entityElements = getXMLElements(entitiesContent, 'entity');
     const coreEntities = entityElements.map((e) => e.trim()).filter((e) => e.length > 0);
 
     // Parse critical flows
-    const flowsContent = getXMLElementContent(aiContent, 'critical_flows');
+    const flowsContent = getXMLElementContent(aiContent, 'critical_flows') || '';
     const flowElements = getXMLElements(flowsContent, 'flow');
     const criticalFlows = flowElements.map((f) => f.trim()).filter((f) => f.length > 0);
 
     // Parse constraints
-    const constraintsContent = getXMLElementContent(aiContent, 'constraints');
+    const constraintsContent = getXMLElementContent(aiContent, 'constraints') || '';
     const constraintElements = getXMLElements(constraintsContent, 'constraint');
     const constraints = constraintElements.map((c) => c.trim()).filter((c) => c.length > 0);
 

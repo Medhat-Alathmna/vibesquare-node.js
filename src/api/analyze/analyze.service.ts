@@ -158,11 +158,20 @@ export class AnalyzeService {
             },
           };
 
-      technicalResult = await executeTechnicalPipeline(
-        visualPipelineInput,
+      console.log('[Pipeline V2.5] Visual Pipeline Input prepared:', {
+        hasVisualResult: !!visualResult,
+        hasFinalPrompt: !!visualPipelineInput.finalPrompt,
+        hasMetadata: !!visualPipelineInput.metadata,
+        hasComponentIdentification: !!visualPipelineInput.componentIdentification,
+        hasLayoutAnalysis: !!visualPipelineInput.layoutAnalysis,
+        hasDesignSystem: !!visualPipelineInput.designSystem,
+      });
+
+      technicalResult = await executeTechnicalPipeline({
+        visualResults: visualPipelineInput,
         detailLevel,
-        apiStyle
-      );
+        apiStyle,
+      });
       console.log(`[Pipeline V2.5] Technical Pipeline completed in ${technicalResult.metadata.processingTimeMs}ms`);
     }
 

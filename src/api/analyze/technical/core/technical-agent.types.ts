@@ -1074,7 +1074,7 @@ export type ModelTier = 'flash' | 'sonnet' | 'gemini-pro';
  */
 export const MODEL_TIERS: Record<ModelTier, { provider: 'openrouter' | 'gemini'; model: string; costPerMToken: number }> = {
   flash: {
-    provider: 'gemini',
+    provider: 'openrouter',
     model: 'gemini-2.0-flash',
     costPerMToken: 0.075,  // Cheapest, use for non-critical agents
   },
@@ -1084,8 +1084,8 @@ export const MODEL_TIERS: Record<ModelTier, { provider: 'openrouter' | 'gemini';
     costPerMToken: 3.0,  // Balanced, use for critical agents
   },
   'gemini-pro': {
-    provider: 'gemini',
-    model: 'gemini-2.5-pro',
+    provider: 'openrouter',
+    model: 'google/gemini-2.5-pro',
     costPerMToken: 1.25,  // Alternative to Sonnet
   },
 };
@@ -1105,50 +1105,50 @@ export interface AgentModelConfig {
 export const DEFAULT_AGENT_MODEL_CONFIGS: Record<string, AgentModelConfig> = {
   // Critical agents - Use Sonnet/Gemini Pro for best quality
   identity: {
-    primary: 'sonnet',
-    fallbacks: ['gemini-pro'],
+    primary: 'flash',
+    fallbacks: [],
     requireUserApprovalForFallback: false,  // Identity is foundational, retry automatically
   },
   database: {
-    primary: 'sonnet',
-    fallbacks: ['gemini-pro', 'flash'],
+    primary: 'flash',
+    fallbacks: [],
     requireUserApprovalForFallback: false,
   },
   userStory: {
-    primary: 'sonnet',
-    fallbacks: ['gemini-pro'],
+    primary: 'flash',
+    fallbacks: [],
     requireUserApprovalForFallback: false,
   },
   backend: {
-    primary: 'sonnet',
-    fallbacks: ['gemini-pro', 'flash'],
+    primary: 'flash',
+    fallbacks: [],
     requireUserApprovalForFallback: false,
   },
   prdValidator: {
     primary: 'sonnet',
-    fallbacks: ['gemini-pro'],
+    fallbacks: [],
     requireUserApprovalForFallback: false,
   },
   qa: {
-    primary: 'sonnet',
-    fallbacks: ['gemini-pro'],
+    primary: 'flash',
+    fallbacks: [],
     requireUserApprovalForFallback: false,
   },
 
   // Non-critical agents - Use Flash for cost savings
   security: {
     primary: 'flash',
-    fallbacks: ['sonnet'],
+    fallbacks: [],
     requireUserApprovalForFallback: true,  // Ask before using more expensive model
   },
   testing: {
     primary: 'flash',
-    fallbacks: ['sonnet'],
+    fallbacks: [],
     requireUserApprovalForFallback: true,
   },
   devops: {
     primary: 'flash',
-    fallbacks: ['sonnet'],
+    fallbacks: [],
     requireUserApprovalForFallback: true,
   },
 };

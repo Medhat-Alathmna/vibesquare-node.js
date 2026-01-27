@@ -588,6 +588,19 @@ export async function executeTechnicalPipeline(
   const startTime = Date.now();
   console.log('[Technical Pipeline] Starting execution...');
 
+  // Validate input
+  if (!visualResults) {
+    throw new Error('visualResults parameter is required but was undefined or null');
+  }
+
+  console.log('[Technical Pipeline] Visual Results validation:', {
+    hasFinalPrompt: !!visualResults.finalPrompt,
+    hasMetadata: !!visualResults.metadata,
+    hasComponentIdentification: !!visualResults.componentIdentification,
+    hasLayoutAnalysis: !!visualResults.layoutAnalysis,
+    hasDesignSystem: !!visualResults.designSystem,
+  });
+
   try {
     // Create initial state
     const initialState = createInitialTechnicalState(visualResults, detailLevel, apiStyle);
@@ -598,8 +611,40 @@ export async function executeTechnicalPipeline(
 
     // Check for critical failures
     if (hasCriticalTechnicalAgentFailed(finalState)) {
-      console.error('[Technical Pipeline] Critical agent failed');
-      throw new Error('Technical pipeline failed: critical agent error');
+      // Build detailed error message
+      const failedAgents: string[] = [];
+      const criticalErrors: string[] = [];
+
+      // Check Identity agent
+      if (finalState.agentStatus.identity === 'failed') {
+        failedAgents.push('Identity (Layer 0)');
+      }
+
+      // Check Database agent
+      if (finalState.agentStatus.database === 'failed') {
+        failedAgents.push('Database (Layer 1)');
+      }
+
+      // Collect critical errors
+      finalState.errors.forEach((err) => {
+        if (err.isCritical) {
+          criticalErrors.push(`${err.agentName}: ${err.message} (type: ${err.type})`);
+        }
+      });
+
+      const errorDetails = [
+        failedAgents.length > 0 ? `Failed agents: ${failedAgents.join(', ')}` : null,
+        criticalErrors.length > 0 ? `Critical errors: ${criticalErrors.join('; ')}` : null,
+      ]
+        .filter((x) => x !== null)
+        .join(' | ');
+
+      const errorMessage = `Technical pipeline failed: ${errorDetails || 'critical agent error'}`;
+      console.error(`[Technical Pipeline] ${errorMessage}`);
+      console.error('[Technical Pipeline] Agent statuses:', JSON.stringify(finalState.agentStatus, null, 2));
+      console.error('[Technical Pipeline] All errors:', JSON.stringify(finalState.errors, null, 2));
+
+      throw new Error(errorMessage);
     }
 
     const processingTimeMs = Date.now() - startTime;

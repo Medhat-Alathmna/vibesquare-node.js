@@ -34,8 +34,8 @@ export abstract class BaseTechnicalAgent<TOutput> {
     // Get model config for this agent, or use default
     const agentKey = config.name.replace('Agent', '').toLowerCase();
     this.modelConfig = DEFAULT_AGENT_MODEL_CONFIGS[agentKey] || {
-      primary: 'sonnet',
-      fallbacks: ['gemini-pro', 'flash'],
+      primary: 'flash',
+      fallbacks: [],
       requireUserApprovalForFallback: false,
     };
   }
@@ -51,7 +51,7 @@ export abstract class BaseTechnicalAgent<TOutput> {
    * Get all models to try (primary + fallbacks)
    */
   protected getModelsToTry(): ModelTier[] {
-    return [this.modelConfig.primary, ...this.modelConfig.fallbacks];
+    return [this.modelConfig.primary];
   }
 
   /**
@@ -164,6 +164,18 @@ DETAIL LEVEL: COMPREHENSIVE
         model: modelConfig.model,
       });
 
+      // Validate LLM response
+      if (!result || !result.content || typeof result.content !== 'string' || result.content.trim().length === 0) {
+        throw new TechnicalAgentExecutionError(
+          this.config.name,
+          `LLM returned empty or invalid response. Content type: ${typeof result?.content}, Content: ${JSON.stringify(result?.content)?.substring(0, 100)}`,
+          'llm_error',
+          this.isCritical
+        );
+      }
+
+      console.log(`[${this.config.name}] LLM response length: ${result.content.length} chars`);
+
       // Extract XML from response
       const xmlContent = this.extractXML(result.content);
 
@@ -213,6 +225,16 @@ DETAIL LEVEL: COMPREHENSIVE
    * Extract XML content from LLM response
    */
   protected extractXML(content: string): string {
+    // Validate input
+    if (!content || typeof content !== 'string') {
+      throw new TechnicalAgentExecutionError(
+        this.config.name,
+        `Invalid LLM response content: ${typeof content}`,
+        'xml_parse_error',
+        this.isCritical
+      );
+    }
+
     // Try to find XML block in markdown code fence
     const xmlBlockMatch = content.match(/```xml\s*([\s\S]*?)\s*```/);
     if (xmlBlockMatch) {
@@ -224,6 +246,9 @@ DETAIL LEVEL: COMPREHENSIVE
     if (xmlMatch) {
       return xmlMatch[0].trim();
     }
+
+    // Log the content for debugging
+    console.error(`[${this.config.name}] Failed to extract XML. Content preview:`, content.substring(0, 200));
 
     // If no XML found, throw error
     throw new TechnicalAgentExecutionError(
