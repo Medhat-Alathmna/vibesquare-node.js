@@ -120,7 +120,9 @@ ${visualResults.finalPrompt.substring(0, 3000)}${visualResults.finalPrompt.lengt
 
 ## Instructions
 
-Based on the above analysis, extract the Product Identity:
+Based on the above analysis, extract the Product Identity.
+
+**Formal Instruction**: If the analysis does not provide sufficient evidence to conclude a specific element (such as Vision, Problem Statement, Value Proposition, or specific context details), you MUST explicitly state that the element was "not inferred from the analysis". Do not provide speculative or generic content.
 
 1. **Vision** - What is this product trying to become?
    - Write a clear, inspiring vision statement

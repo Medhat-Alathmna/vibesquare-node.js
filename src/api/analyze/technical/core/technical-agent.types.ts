@@ -1075,7 +1075,7 @@ export type ModelTier = 'flash' | 'sonnet' | 'gemini-pro';
 export const MODEL_TIERS: Record<ModelTier, { provider: 'openrouter' | 'gemini'; model: string; costPerMToken: number }> = {
   flash: {
     provider: 'openrouter',
-    model: 'gemini-2.0-flash',
+    model: 'google/gemini-3-flash-preview',
     costPerMToken: 0.075,  // Cheapest, use for non-critical agents
   },
   sonnet: {

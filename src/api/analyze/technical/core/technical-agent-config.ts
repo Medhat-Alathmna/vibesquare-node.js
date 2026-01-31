@@ -5,6 +5,7 @@
  * Each agent outputs structured XML for consistency.
  */
 
+import { env } from 'config/env';
 import { TechnicalAgentConfig } from './technical-agent.types';
 
 // ============ System Prompts ============
@@ -1581,8 +1582,7 @@ export const TECHNICAL_AGENT_CONFIGS: Record<string, TechnicalAgentConfig> = {
     layer: 0,
     dependencies: [],
     enableWebSearch: false,
-    provider: 'openrouter',
-    model: 'anthropic/claude-3.5-sonnet',  // Sonnet for deep context understanding
+    
   },
 
   // Layer 1: Database Agent
@@ -1596,8 +1596,7 @@ export const TECHNICAL_AGENT_CONFIGS: Record<string, TechnicalAgentConfig> = {
     layer: 1,
     dependencies: ['identity'],  // Now depends on identity
     enableWebSearch: true,
-    provider: 'openrouter',
-    model: 'anthropic/claude-3.5-sonnet',  // Sonnet for accurate schema inference
+  
   },
 
   backend: {
@@ -1610,8 +1609,7 @@ export const TECHNICAL_AGENT_CONFIGS: Record<string, TechnicalAgentConfig> = {
     layer: 2,
     dependencies: ['database'],
     enableWebSearch: true,
-    provider: 'openrouter',
-    model: 'anthropic/claude-3.5-sonnet',  // Sonnet for accurate API design
+  
   },
 
   security: {
@@ -1624,7 +1622,6 @@ export const TECHNICAL_AGENT_CONFIGS: Record<string, TechnicalAgentConfig> = {
     layer: 2,
     dependencies: ['database', 'backend'],
     enableWebSearch: true,
-    provider: 'openrouter',
   },
 
   testing: {
@@ -1637,7 +1634,6 @@ export const TECHNICAL_AGENT_CONFIGS: Record<string, TechnicalAgentConfig> = {
     layer: 2,
     dependencies: ['database', 'backend'],
     enableWebSearch: true,
-    provider: 'openrouter',
   },
 
   devops: {
@@ -1650,7 +1646,6 @@ export const TECHNICAL_AGENT_CONFIGS: Record<string, TechnicalAgentConfig> = {
     layer: 2,
     dependencies: ['database'],
     enableWebSearch: true,
-    provider: 'openrouter',
   },
 
   userStory: {
@@ -1663,8 +1658,7 @@ export const TECHNICAL_AGENT_CONFIGS: Record<string, TechnicalAgentConfig> = {
     layer: 2,
     dependencies: ['identity', 'database'],  // Now depends on identity for context
     enableWebSearch: false,
-    provider: 'openrouter',
-    model: 'anthropic/claude-3.5-sonnet',  // Sonnet for comprehensive story generation
+   
   },
 
   prdValidator: {
@@ -1677,8 +1671,6 @@ export const TECHNICAL_AGENT_CONFIGS: Record<string, TechnicalAgentConfig> = {
     layer: 3,
     dependencies: ['identity', 'database', 'backend', 'security', 'testing', 'devops', 'userStory'],
     enableWebSearch: false,
-    provider: 'openrouter',
-    model: 'anthropic/claude-3.5-sonnet',  // Sonnet for thorough validation
   },
 
   qa: {
@@ -1691,8 +1683,7 @@ export const TECHNICAL_AGENT_CONFIGS: Record<string, TechnicalAgentConfig> = {
     layer: 3,
     dependencies: ['prdValidator'],
     enableWebSearch: false,
-    provider: 'openrouter',
-    model: 'anthropic/claude-3.5-sonnet',  // Sonnet for comprehensive QA
+   
   },
 };
 
