@@ -273,3 +273,90 @@ export interface IPRDRepository {
   // Helper methods
   getMarkdown(id: string): Promise<string | null>;
 }
+
+// ============================================
+// Visual Pipeline Cache Repository Interface
+// ============================================
+
+/**
+ * Visual Pipeline Cache Data Structure
+ *
+ * Stores cached results from the Visual Pipeline (V2) to avoid
+ * redundant processing of the same URL.
+ *
+ * Cache Strategy:
+ * - Global cache (shared across all users)
+ * - 7-day TTL by default
+ * - URL normalization for deduplication
+ */
+export interface VisualPipelineCacheData {
+  id: string;
+  normalizedUrl: string;
+  originalUrl: string;
+  finalPrompt: string;
+  userQuestions?: any[]; // UserQuestion[] from agent.types.ts
+  metadata: any; // PipelineMetadata from agent.types.ts
+  layoutAnalysis?: any; // LayoutAnalysisOutput from agent.types.ts
+  componentIdentification?: any; // ComponentIdentificationOutput from agent.types.ts
+  designSystem?: any; // DesignSystemOutput from agent.types.ts
+  cachedAt: Date;
+  expiresAt: Date;
+  hitCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * DTO for creating a new visual pipeline cache entry
+ */
+export interface CreateVisualPipelineCacheDTO {
+  normalizedUrl: string;
+  originalUrl: string;
+  finalPrompt: string;
+  userQuestions?: any[];
+  metadata: any;
+  layoutAnalysis?: any;
+  componentIdentification?: any;
+  designSystem?: any;
+  ttlDays?: number; // Default: 7
+}
+
+/**
+ * Repository interface for Visual Pipeline Cache operations
+ */
+export interface IVisualPipelineCacheRepository {
+  /**
+   * Find a cached entry by normalized URL
+   * Returns null if not found or if expired
+   */
+  findByUrl(normalizedUrl: string): Promise<VisualPipelineCacheData | null>;
+
+  /**
+   * Create a new cache entry
+   * Automatically calculates expiresAt based on ttlDays
+   */
+  create(data: CreateVisualPipelineCacheDTO): Promise<VisualPipelineCacheData>;
+
+  /**
+   * Increment the hit count for a cache entry
+   * Called when cached data is used
+   */
+  incrementHitCount(id: string): Promise<void>;
+
+  /**
+   * Delete all expired cache entries
+   * Returns the count of deleted entries
+   * Used by background cleanup job
+   */
+  deleteExpired(): Promise<number>;
+
+  /**
+   * Delete a specific cache entry by ID
+   */
+  delete(id: string): Promise<boolean>;
+
+  /**
+   * Check if a cache entry is expired
+   */
+  isExpired(cachedAt: Date, ttlDays: number): boolean;
+}

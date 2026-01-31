@@ -65,6 +65,10 @@ export const analyzeUrlV2 = {
       .messages({
         'boolean.base': 'includeDebug must be a boolean',
       }),
+    forceRefresh: Joi.boolean().default(false)
+      .messages({
+        'boolean.base': 'forceRefresh must be a boolean',
+      }),
   }),
 };
 
@@ -109,6 +113,10 @@ export const analyzeUrlV25 = {
     includeDebug: Joi.boolean().default(false)
       .messages({
         'boolean.base': 'includeDebug must be a boolean',
+      }),
+    forceRefresh: Joi.boolean().default(false)
+      .messages({
+        'boolean.base': 'forceRefresh must be a boolean',
       }),
   }),
 };

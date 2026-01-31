@@ -1,7 +1,9 @@
 import { executePipeline, executePipelineV2, LLMModel, PipelineResult, UserTier, PipelineV2Result } from './pipeline';
 import { executeTechnicalPipeline } from './technical';
 import { PipelineType, DetailLevel, APIStyle, TechnicalPipelineResult, VisualPipelineResult } from './technical/core/technical-agent.types';
-import { getPRDRepository, CreatePRDDTO } from '../../shared/repositories';
+import { getPRDRepository, CreatePRDDTO, getVisualPipelineCacheRepository, VisualPipelineCacheData } from '../../shared/repositories';
+import { normalizeUrl } from '../../shared/utils/url-normalizer';
+import { pipelineQueueService } from './services/pipeline-queue.service';
 
 export interface AnalyzeOptions {
   url: string;
@@ -13,6 +15,7 @@ export interface AnalyzeV2Options {
   url: string;
   tier?: UserTier;
   includeDebug?: boolean;
+  forceRefresh?: boolean; // Force bypass cache and re-execute pipeline
 }
 
 export interface AnalyzeV25Options {
@@ -23,6 +26,7 @@ export interface AnalyzeV25Options {
   tier?: UserTier;
   userId?: string;
   includeDebug?: boolean;
+  forceRefresh?: boolean; // Force bypass cache and re-execute pipeline
 }
 
 export interface AnalyzeV25Result {
@@ -38,6 +42,8 @@ export interface AnalyzeV25Result {
     validationScore?: number;
     qaIterations?: number;
     qaApproved?: boolean;
+    cached?: boolean; // Whether visual pipeline result was from cache
+    cachedAt?: Date; // When the cached result was originally created
   };
   debug?: any;
 }
@@ -69,15 +75,81 @@ export class AnalyzeService {
    *
    * Falls back to single-LLM on critical failures.
    *
+   * Includes caching:
+   * - Global cache (shared across all users)
+   * - 7-day TTL
+   * - URL normalization (http/https same, www/non-www same)
+   * - Request queuing to prevent duplicate executions
+   *
    * @param options - V2 Analysis options
    * @returns Pipeline result with prompt, user questions, and metadata
    */
   async analyzeUrlV2(options: AnalyzeV2Options): Promise<PipelineV2Result> {
-    return executePipelineV2({
-      url: options.url,
-      tier: options.tier,
-      includeDebug: options.includeDebug,
+    const { url, tier, includeDebug = false, forceRefresh = false } = options;
+
+    // Normalize URL for cache lookup
+    const normalizedUrl = normalizeUrl(url);
+    console.log(`[analyzeUrlV2] Original URL: ${url}`);
+    console.log(`[analyzeUrlV2] Normalized URL: ${normalizedUrl}`);
+
+    let result: PipelineV2Result;
+    let fromCache = false;
+    let cachedAt: Date | undefined;
+
+    // Step 1: Check cache (unless forceRefresh)
+    if (!forceRefresh) {
+      const cached = await this.getFromCache(normalizedUrl);
+      if (cached) {
+        result = this.reconstructPipelineResult(cached);
+        fromCache = true;
+        cachedAt = cached.cachedAt;
+
+        // Increment hit count asynchronously (don't wait)
+        this.incrementCacheHit(cached.id).catch((err) =>
+          console.error('[analyzeUrlV2] Failed to increment cache hit:', err)
+        );
+
+        console.log(`[analyzeUrlV2] Returning cached result from ${cachedAt?.toISOString()}`);
+
+        // Add cache metadata to result
+        return {
+          ...result,
+          metadata: {
+            ...result.metadata,
+            cached: true,
+            cachedAt,
+          } as any,
+        };
+      } else {
+        console.log(`[analyzeUrlV2] Cache MISS for: ${normalizedUrl}`);
+      }
+    } else {
+      console.log(`[analyzeUrlV2] Force refresh requested - bypassing cache`);
+    }
+
+    // Step 2: Execute pipeline with queue management
+    console.log(`[analyzeUrlV2] Executing visual pipeline...`);
+    result = await pipelineQueueService.execute(normalizedUrl, async () => {
+      const pipelineResult = await executePipelineV2({
+        url,
+        tier,
+        includeDebug,
+      });
+
+      // Step 3: Save to cache immediately after execution
+      await this.saveToCache(normalizedUrl, url, pipelineResult);
+
+      return pipelineResult;
     });
+
+    // Add cache metadata to result (not cached)
+    return {
+      ...result,
+      metadata: {
+        ...result.metadata,
+        cached: false,
+      } as any,
+    };
   }
 
   /**
@@ -87,6 +159,8 @@ export class AnalyzeService {
    *
    * Visual Pipeline:
    * - Layout Analyzer, Component Identifier, Design System Extractor
+   * - Includes global cache with 7-day TTL
+   * - URL normalization and request queuing
    *
    * Technical Pipeline:
    * - Database Agent (XML schema)
@@ -110,22 +184,65 @@ export class AnalyzeService {
       tier,
       userId,
       includeDebug = false,
+      forceRefresh = false,
     } = options;
 
     console.log(`[Pipeline V2.5] Starting analysis for: ${url}`);
     console.log(`[Pipeline V2.5] Pipeline type: ${pipelineType}, Detail level: ${detailLevel}`);
 
+    // Normalize URL for cache lookup
+    const normalizedUrl = normalizeUrl(url);
+    console.log(`[Pipeline V2.5] Original URL: ${url}`);
+    console.log(`[Pipeline V2.5] Normalized URL: ${normalizedUrl}`);
+
     let visualResult: PipelineV2Result | undefined;
     let technicalResult: TechnicalPipelineResult | undefined;
+    let fromCache = false;
+    let cachedAt: Date | undefined;
 
     // Step 1: Run Visual Pipeline (if needed)
     if (pipelineType === 'visual' || pipelineType === 'both') {
       console.log('[Pipeline V2.5] Running Visual Pipeline...');
-      visualResult = await executePipelineV2({
-        url,
-        tier,
-        includeDebug,
-      });
+
+      // Check cache first (unless forceRefresh)
+      if (!forceRefresh) {
+        const cached = await this.getFromCache(normalizedUrl);
+        if (cached) {
+          visualResult = this.reconstructPipelineResult(cached);
+          fromCache = true;
+          cachedAt = cached.cachedAt;
+
+          // Increment hit count asynchronously
+          this.incrementCacheHit(cached.id).catch((err) =>
+            console.error('[Pipeline V2.5] Failed to increment cache hit:', err)
+          );
+
+          console.log(`[Pipeline V2.5] Using cached visual result from ${cachedAt?.toISOString()}`);
+        } else {
+          console.log(`[Pipeline V2.5] Cache MISS for: ${normalizedUrl}`);
+        }
+      } else {
+        console.log(`[Pipeline V2.5] Force refresh requested - bypassing cache`);
+      }
+
+      // Execute pipeline if not cached
+      if (!visualResult) {
+        visualResult = await pipelineQueueService.execute(normalizedUrl, async () => {
+          const pipelineResult = await executePipelineV2({
+            url,
+            tier,
+            includeDebug,
+          });
+
+          // Save to cache immediately after execution
+          await this.saveToCache(normalizedUrl, url, pipelineResult);
+
+          return pipelineResult;
+        });
+
+        fromCache = false;
+      }
+
       console.log(`[Pipeline V2.5] Visual Pipeline completed in ${visualResult.metadata.processingTimeMs}ms`);
     }
 
@@ -222,6 +339,8 @@ export class AnalyzeService {
         validationScore: technicalResult?.summaries.validation.scores.overall,
         qaIterations: technicalResult?.metadata.qaIterations,
         qaApproved: technicalResult?.summaries.qa.finalApproval,
+        cached: fromCache, // Whether visual pipeline result was from cache
+        cachedAt: cachedAt, // When the cached result was originally created
       },
       debug: includeDebug
         ? {
@@ -229,6 +348,98 @@ export class AnalyzeService {
             technicalDebug: technicalResult,
           }
         : undefined,
+    };
+  }
+
+  /**
+   * Get visual pipeline result from cache
+   *
+   * @param normalizedUrl - Normalized URL
+   * @returns Cached data or null if not found/expired
+   */
+  private async getFromCache(normalizedUrl: string): Promise<VisualPipelineCacheData | null> {
+    try {
+      const repo = getVisualPipelineCacheRepository();
+      const cached = await repo.findByUrl(normalizedUrl);
+
+      if (cached) {
+        console.log(`[Cache HIT] Found cached visual result for: ${normalizedUrl}`);
+        console.log(`[Cache] Hit count: ${cached.hitCount}, Cached at: ${cached.cachedAt.toISOString()}`);
+      }
+
+      return cached;
+    } catch (error) {
+      console.error('[Cache] Failed to retrieve from cache:', error);
+      return null; // Graceful degradation - don't break pipeline if cache fails
+    }
+  }
+
+  /**
+   * Save visual pipeline result to cache
+   *
+   * @param normalizedUrl - Normalized URL
+   * @param originalUrl - Original URL from request
+   * @param result - Visual pipeline result
+   */
+  private async saveToCache(
+    normalizedUrl: string,
+    originalUrl: string,
+    result: PipelineV2Result
+  ): Promise<void> {
+    try {
+      const repo = getVisualPipelineCacheRepository();
+      await repo.create({
+        normalizedUrl,
+        originalUrl,
+        finalPrompt: result.finalPrompt,
+        userQuestions: result.userQuestions,
+        metadata: result.metadata,
+        layoutAnalysis: result.debug?.agentOutputs?.layoutAnalysis?.data,
+        componentIdentification: result.debug?.agentOutputs?.componentIdentification?.data,
+        designSystem: result.debug?.agentOutputs?.designSystem?.data,
+        ttlDays: 7,
+      });
+      console.log(`[Cache] Saved visual pipeline result for: ${normalizedUrl}`);
+    } catch (error) {
+      console.error('[Cache] Failed to save to cache:', error);
+      // Don't throw - caching failure shouldn't break the pipeline flow
+    }
+  }
+
+  /**
+   * Increment cache hit count asynchronously
+   *
+   * @param cacheId - Cache entry ID
+   */
+  private async incrementCacheHit(cacheId: string): Promise<void> {
+    try {
+      const repo = getVisualPipelineCacheRepository();
+      await repo.incrementHitCount(cacheId);
+    } catch (error) {
+      console.error('[Cache] Failed to increment cache hit:', error);
+      // Silent failure - not critical
+    }
+  }
+
+  /**
+   * Reconstruct PipelineV2Result from cached data
+   *
+   * @param cached - Cached visual pipeline data
+   * @returns Reconstructed pipeline result
+   */
+  private reconstructPipelineResult(cached: VisualPipelineCacheData): PipelineV2Result {
+    return {
+      finalPrompt: cached.finalPrompt,
+      userQuestions: cached.userQuestions,
+      metadata: cached.metadata,
+      debug: {
+        compressed: false,
+        agentOutputs: {
+          layoutAnalysis: cached.layoutAnalysis ? { data: cached.layoutAnalysis } : undefined,
+          componentIdentification: cached.componentIdentification ? { data: cached.componentIdentification } : undefined,
+          designSystem: cached.designSystem ? { data: cached.designSystem } : undefined,
+        },
+      },
     };
   }
 }

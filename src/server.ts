@@ -1,6 +1,6 @@
 import app from './app';
 import { connectDatabase, env } from './config';
-import { startQuotaResetJob } from './jobs';
+import { startQuotaResetJob, startCacheCleanupJob } from './jobs';
 
 const startServer = async () => {
   try {
@@ -10,6 +10,7 @@ const startServer = async () => {
 
     // Start background jobs
     startQuotaResetJob();
+    startCacheCleanupJob();
 
     // Start server
     app.listen(env.PORT, () => {

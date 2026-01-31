@@ -1,7 +1,20 @@
 import { env } from '../../config/env';
-import { IProjectRepository, ICollectionRepository, ICategoryRepository, IPRDRepository } from './interfaces';
-import { PostgresProjectRepository, PostgresCollectionRepository, PostgresCategoryRepository, PostgresPRDRepository } from './postgres';
+import {
+  IProjectRepository,
+  ICollectionRepository,
+  ICategoryRepository,
+  IPRDRepository,
+  IVisualPipelineCacheRepository
+} from './interfaces';
+import {
+  PostgresProjectRepository,
+  PostgresCollectionRepository,
+  PostgresCategoryRepository,
+  PostgresPRDRepository
+} from './postgres';
 import { MongoProjectRepository, MongoCollectionRepository } from './mongodb';
+import { PostgresVisualPipelineCacheRepository } from './postgres/visual-pipeline-cache.repository';
+import { MongoDBVisualPipelineCacheRepository } from './mongodb/visual-pipeline-cache.repository';
 
 export * from './interfaces';
 
@@ -10,6 +23,7 @@ let projectRepository: IProjectRepository | null = null;
 let collectionRepository: ICollectionRepository | null = null;
 let categoryRepository: ICategoryRepository | null = null;
 let prdRepository: IPRDRepository | null = null;
+let visualPipelineCacheRepository: IVisualPipelineCacheRepository | null = null;
 
 export function getProjectRepository(): IProjectRepository {
   if (!projectRepository) {
@@ -55,4 +69,19 @@ export function getPRDRepository(): IPRDRepository {
     prdRepository = new PostgresPRDRepository();
   }
   return prdRepository;
+}
+
+/**
+ * Get Visual Pipeline Cache Repository instance
+ * Supports both PostgreSQL and MongoDB based on DB_TYPE env variable
+ */
+export function getVisualPipelineCacheRepository(): IVisualPipelineCacheRepository {
+  if (!visualPipelineCacheRepository) {
+    if (env.DB_TYPE === 'mongodb') {
+      visualPipelineCacheRepository = new MongoDBVisualPipelineCacheRepository();
+    } else {
+      visualPipelineCacheRepository = new PostgresVisualPipelineCacheRepository();
+    }
+  }
+  return visualPipelineCacheRepository;
 }
