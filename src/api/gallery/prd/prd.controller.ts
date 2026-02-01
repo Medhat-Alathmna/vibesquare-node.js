@@ -28,6 +28,38 @@ export const galleryPRDController = {
   }),
 
   /**
+   * Get PRD by source URL
+   * GET /api/gallery/prd/by-url?url=...
+   * URL should be URL-encoded in query parameter
+   */
+  getByUrl: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.galleryUser) {
+      return res.status(httpStatus.UNAUTHORIZED).json(
+        ApiResponse.error('Authentication required', httpStatus.UNAUTHORIZED)
+      );
+    }
+
+    let { url } = req.query;
+
+    if (!url || typeof url !== 'string') {
+      return res.status(httpStatus.BAD_REQUEST).json(
+        ApiResponse.error('URL parameter is required', httpStatus.BAD_REQUEST)
+      );
+    }
+
+    // Decode URL in case it was URL-encoded
+    try {
+      url = decodeURIComponent(url);
+    } catch {
+      // If decoding fails, use as-is
+    }
+
+    const prd = await galleryPRDService.getPRDByUrl(req.galleryUser.id, url);
+
+    res.json(ApiResponse.success(prd));
+  }),
+
+  /**
    * Get specific PRD by ID
    * GET /api/gallery/prd/:id
    */

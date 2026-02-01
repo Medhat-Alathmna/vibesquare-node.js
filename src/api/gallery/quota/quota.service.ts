@@ -313,35 +313,6 @@ export class QuotaService {
   }
 
   /**
-   * Refund tokens for a failed analysis
-   */
-  async refundTokens(userId: string, tokens: number, analysisId: string, reason: string): Promise<void> {
-    let usage = await galleryTokenUsageRepository.findByUserId(userId);
-    if (!usage) {
-      return; // No usage to refund
-    }
-
-    const tokensBefore = usage.tokensUsed;
-    const tokensAfter = Math.max(0, tokensBefore - tokens);
-
-    await galleryTokenUsageRepository.update(userId, {
-      tokensUsed: tokensAfter,
-      totalTokensUsed: Math.max(0, usage.totalTokensUsed - tokens)
-    });
-
-    await galleryTokenTransactionRepository.create({
-      userId,
-      type: 'refund',
-      tokensAmount: tokens,
-      tokensBefore,
-      tokensAfter,
-      analysisId,
-      description: reason,
-      metadata: {}
-    });
-  }
-
-  /**
    * Handle tier upgrade - optionally reset quota
    */
   async handleTierUpgrade(userId: string, newTier: GallerySubscriptionTier): Promise<void> {

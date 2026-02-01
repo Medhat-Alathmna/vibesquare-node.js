@@ -16,6 +16,17 @@ router.get(
 );
 
 /**
+ * @route GET /api/gallery/prd/by-url
+ * @desc Get PRD by source URL
+ * @access Private
+ */
+router.get(
+  '/by-url',
+  galleryAuthenticate(),
+  galleryPRDController.getByUrl
+);
+
+/**
  * @route GET /api/gallery/prd/:id
  * @desc Get specific PRD by ID
  * @access Private

@@ -264,6 +264,7 @@ export interface IPRDRepository {
   findById(id: string): Promise<PRDData | null>;
   findByUserId(userId: string, page?: number, limit?: number): Promise<PRDListResult>;
   findByUrl(url: string): Promise<PRDData[]>;
+  findBySourceUrl(sourceUrl: string): Promise<PRDData | null>;
 
   // CRUD operations
   create(data: CreatePRDDTO): Promise<PRDData>;

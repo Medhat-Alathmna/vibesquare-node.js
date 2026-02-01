@@ -128,6 +128,22 @@ export class PostgresPRDRepository implements IPRDRepository {
   }
 
   /**
+   * Find single PRD by source URL (returns most recent)
+   */
+  async findBySourceUrl(sourceUrl: string): Promise<PRDData | null> {
+    const row = await this.db('prds')
+      .where({ source_url: sourceUrl })
+      .orderBy('created_at', 'desc')
+      .first();
+
+    if (!row) {
+      return null;
+    }
+
+    return this.mapRowToPRD(row);
+  }
+
+  /**
    * Create a new PRD
    */
   async create(data: CreatePRDDTO): Promise<PRDData> {
