@@ -58,10 +58,10 @@ async function identityAgentNode(state: TechnicalGraphStateType): Promise<Partia
 
     const result = await identityAgent.executeWithRetry(input);
 
-    console.log(`[Technical Pipeline] Identity Agent completed with ${result.confidence}% confidence`);
+    console.log(`[Technical Pipeline] Identity Agent completed with ${result.data.confidence}% confidence`);
 
     // Generate confidence breakdown with suggested questions for low confidence
-    const confidenceBreakdown = identityAgent.generateConfidenceBreakdown(result);
+    const confidenceBreakdown = identityAgent.generateConfidenceBreakdown(result.data);
 
     // Update confidence state
     const confidenceUpdate = updateAgentConfidence(state, confidenceBreakdown);
@@ -73,8 +73,8 @@ async function identityAgentNode(state: TechnicalGraphStateType): Promise<Partia
     }
 
     return {
-      identity: result.identity,
-      identityConfidence: result.confidence,
+      identity: result.data.identity,
+      identityConfidence: result.data.confidence,
       agentStatus: { identity: 'completed' },
       tokenUsage: result.tokenUsage,
       ...confidenceUpdate,

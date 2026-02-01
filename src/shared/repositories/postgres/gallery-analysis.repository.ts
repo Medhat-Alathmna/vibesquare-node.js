@@ -1,4 +1,4 @@
-import { pgPool } from '../../../config/database';
+import { getKnex } from '../../../config/knex';
 import { v4 as uuidv4 } from 'uuid';
 import {
   IGalleryAnalysis,
@@ -8,68 +8,68 @@ import {
 } from '../../../api/gallery/gallery.types';
 
 export class GalleryAnalysisRepository {
+  private get db() {
+    return getKnex();
+  }
+
   async create(data: Omit<IGalleryAnalysis, 'id' | 'createdAt' | 'completedAt' | 'deletedAt'>): Promise<IGalleryAnalysis> {
     const id = `ga-${uuidv4()}`;
-    const result = await pgPool.query(
-      `INSERT INTO gallery_analyses (
-        id, user_id, url, prompt, tokens_used, status, metadata,
-        page_title, page_description, screenshot_url, pipeline_type, prd_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      RETURNING *`,
-      [
+    const [row] = await this.db('gallery_analyses')
+      .insert({
         id,
-        data.userId,
-        data.url,
-        data.prompt,
-        data.tokensUsed,
-        data.status,
-        JSON.stringify(data.metadata || {}),
-        data.pageTitle,
-        data.pageDescription,
-        data.screenshotUrl,
-        data.pipelineType || 'v1',
-        data.prdId || null
-      ]
-    );
-    return this.mapRow(result.rows[0]);
+        user_id: data.userId,
+        url: data.url,
+        prompt: data.prompt,
+        tokens_used: data.tokensUsed,
+        status: data.status,
+        metadata: JSON.stringify(data.metadata || {}),
+        page_title: data.pageTitle,
+        page_description: data.pageDescription,
+        screenshot_url: data.screenshotUrl,
+        pipeline_type: data.pipelineType || 'v1',
+        prd_id: data.prdId || null
+      })
+      .returning('*');
+    return this.mapRow(row);
   }
 
   async findById(id: string): Promise<IGalleryAnalysis | null> {
-    const result = await pgPool.query(
-      'SELECT * FROM gallery_analyses WHERE id = $1 AND deleted_at IS NULL',
-      [id]
-    );
-    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+    const row = await this.db('gallery_analyses')
+      .where({ id })
+      .whereNull('deleted_at')
+      .first();
+    return row ? this.mapRow(row) : null;
   }
 
   async findByIdAndUserId(id: string, userId: string): Promise<IGalleryAnalysis | null> {
-    const result = await pgPool.query(
-      'SELECT * FROM gallery_analyses WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
-      [id, userId]
-    );
-    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+    const row = await this.db('gallery_analyses')
+      .where({ id, user_id: userId })
+      .whereNull('deleted_at')
+      .first();
+    return row ? this.mapRow(row) : null;
   }
 
   async findByUserId(userId: string, page = 1, limit = 20): Promise<PaginatedResult<AnalysisHistoryItem>> {
     const offset = (page - 1) * limit;
-    const [dataResult, countResult] = await Promise.all([
-      pgPool.query(
-        `SELECT id, url, page_title, page_description, screenshot_url, tokens_used, status, created_at, completed_at
-         FROM gallery_analyses
-         WHERE user_id = $1 AND deleted_at IS NULL
-         ORDER BY created_at DESC
-         LIMIT $2 OFFSET $3`,
-        [userId, limit, offset]
-      ),
-      pgPool.query(
-        'SELECT COUNT(*) FROM gallery_analyses WHERE user_id = $1 AND deleted_at IS NULL',
-        [userId]
-      )
+
+    const [rows, countResult] = await Promise.all([
+      this.db('gallery_analyses')
+        .select('id', 'url', 'page_title', 'page_description', 'screenshot_url', 'tokens_used', 'status', 'created_at', 'completed_at')
+        .where({ user_id: userId })
+        .whereNull('deleted_at')
+        .orderBy('created_at', 'desc')
+        .limit(limit)
+        .offset(offset),
+      this.db('gallery_analyses')
+        .where({ user_id: userId })
+        .whereNull('deleted_at')
+        .count('* as count')
+        .first()
     ]);
 
-    const total = parseInt(countResult.rows[0].count, 10);
+    const total = parseInt(countResult?.count as string || '0', 10);
     return {
-      data: dataResult.rows.map(this.mapHistoryItem),
+      data: rows.map(this.mapHistoryItem),
       total,
       page,
       limit,
@@ -78,9 +78,7 @@ export class GalleryAnalysisRepository {
   }
 
   async update(id: string, data: Partial<Omit<IGalleryAnalysis, 'id' | 'createdAt' | 'userId'>>): Promise<IGalleryAnalysis | null> {
-    const fields: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
+    const updateData: Record<string, any> = {};
 
     const fieldMap: Record<string, string> = {
       url: 'url',
@@ -99,77 +97,76 @@ export class GalleryAnalysisRepository {
 
     for (const [key, dbField] of Object.entries(fieldMap)) {
       if ((data as any)[key] !== undefined) {
-        fields.push(`${dbField} = $${paramIndex++}`);
         const value = key === 'metadata' ? JSON.stringify((data as any)[key]) : (data as any)[key];
-        values.push(value);
+        updateData[dbField] = value;
       }
     }
 
-    if (fields.length === 0) return this.findById(id);
+    if (Object.keys(updateData).length === 0) return this.findById(id);
 
-    values.push(id);
-
-    const result = await pgPool.query(
-      `UPDATE gallery_analyses SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
-      values
-    );
-    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+    const [row] = await this.db('gallery_analyses')
+      .where({ id })
+      .update(updateData)
+      .returning('*');
+    return row ? this.mapRow(row) : null;
   }
 
   async markCompleted(id: string, prompt: string, tokensUsed: number, metadata?: Record<string, any>): Promise<IGalleryAnalysis | null> {
-    const result = await pgPool.query(
-      `UPDATE gallery_analyses SET
-        prompt = $1,
-        tokens_used = $2,
-        status = 'completed',
-        metadata = COALESCE($3, metadata),
-        completed_at = NOW()
-       WHERE id = $4
-       RETURNING *`,
-      [prompt, tokensUsed, metadata ? JSON.stringify(metadata) : null, id]
-    );
-    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+    const updateData: Record<string, any> = {
+      prompt,
+      tokens_used: tokensUsed,
+      status: 'completed',
+      completed_at: this.db.fn.now()
+    };
+
+    // Only update metadata if provided, otherwise keep existing
+    if (metadata) {
+      updateData.metadata = JSON.stringify(metadata);
+    }
+
+    const [row] = await this.db('gallery_analyses')
+      .where({ id })
+      .update(updateData)
+      .returning('*');
+    return row ? this.mapRow(row) : null;
   }
 
   async markFailed(id: string, error: string): Promise<IGalleryAnalysis | null> {
-    const result = await pgPool.query(
-      `UPDATE gallery_analyses SET
-        status = 'failed',
-        metadata = jsonb_set(COALESCE(metadata, '{}'), '{error}', $1::jsonb),
-        completed_at = NOW()
-       WHERE id = $2
-       RETURNING *`,
-      [JSON.stringify(error), id]
-    );
-    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+    const [row] = await this.db('gallery_analyses')
+      .where({ id })
+      .update({
+        status: 'failed',
+        metadata: this.db.raw(`jsonb_set(COALESCE(metadata, '{}'), '{error}', ?::jsonb)`, [JSON.stringify(error)]),
+        completed_at: this.db.fn.now()
+      })
+      .returning('*');
+    return row ? this.mapRow(row) : null;
   }
 
   async softDelete(id: string): Promise<boolean> {
-    const result = await pgPool.query(
-      'UPDATE gallery_analyses SET deleted_at = NOW() WHERE id = $1',
-      [id]
-    );
-    return result.rowCount !== null && result.rowCount > 0;
+    const count = await this.db('gallery_analyses')
+      .where({ id })
+      .update({ deleted_at: this.db.fn.now() });
+    return count > 0;
   }
 
   async countByUserId(userId: string): Promise<number> {
-    const result = await pgPool.query(
-      'SELECT COUNT(*) FROM gallery_analyses WHERE user_id = $1 AND deleted_at IS NULL',
-      [userId]
-    );
-    return parseInt(result.rows[0].count, 10);
+    const result = await this.db('gallery_analyses')
+      .where({ user_id: userId })
+      .whereNull('deleted_at')
+      .count('* as count')
+      .first();
+    return parseInt(result?.count as string || '0', 10);
   }
 
   async getRecentByUserId(userId: string, limit = 5): Promise<AnalysisHistoryItem[]> {
-    const result = await pgPool.query(
-      `SELECT id, url, page_title, page_description, screenshot_url, tokens_used, status, created_at, completed_at
-       FROM gallery_analyses
-       WHERE user_id = $1 AND deleted_at IS NULL
-       ORDER BY created_at DESC
-       LIMIT $2`,
-      [userId, limit]
-    );
-    return result.rows.map(this.mapHistoryItem);
+    const rows = await this.db('gallery_analyses')
+      .select('id', 'url', 'page_title', 'page_description', 'screenshot_url', 'tokens_used', 'status', 'created_at', 'completed_at')
+      .where({ user_id: userId })
+      .whereNull('deleted_at')
+      .orderBy('created_at', 'desc')
+      .limit(limit);
+    return rows.map(this.mapHistoryItem);
   }
 
   private mapRow(row: any): IGalleryAnalysis {
