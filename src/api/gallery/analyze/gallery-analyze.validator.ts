@@ -47,5 +47,32 @@ export const galleryAnalyzeValidator = {
     params: Joi.object({
       id: Joi.string().required()
     })
+  },
+
+  estimateV25: {
+    body: Joi.object({
+      url: Joi.string().uri().required().messages({
+        'string.uri': 'Please provide a valid URL',
+        'any.required': 'URL is required'
+      })
+    })
+  },
+
+  confirmV25: {
+    body: Joi.object({
+      url: Joi.string().uri().required().messages({
+        'string.uri': 'Please provide a valid URL',
+        'any.required': 'URL is required'
+      }),
+      pipelineType: Joi.string().valid('visual', 'technical', 'both').default('both').messages({
+        'any.only': 'Pipeline type must be one of: visual, technical, both'
+      }),
+      detailLevel: Joi.string().valid('basic', 'detailed', 'comprehensive').default('detailed').messages({
+        'any.only': 'Detail level must be one of: basic, detailed, comprehensive'
+      }),
+      apiStyle: Joi.string().valid('REST', 'GraphQL').default('REST').messages({
+        'any.only': 'API style must be one of: REST, GraphQL'
+      })
+    })
   }
 };

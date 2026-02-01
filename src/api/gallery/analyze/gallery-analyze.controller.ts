@@ -127,5 +127,47 @@ export const galleryAnalyzeController = {
     await galleryAnalyzeService.deleteAnalysis(req.galleryUser.id, id);
 
     res.json(ApiResponse.success(null, 'Analysis deleted successfully'));
+  }),
+
+  /**
+   * Estimate tokens for V2.5 analysis
+   * POST /api/gallery/analyze/v2.5/estimate
+   */
+  estimateV25: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.galleryUser) {
+      return res.status(httpStatus.UNAUTHORIZED).json(
+        ApiResponse.error('Authentication required', httpStatus.UNAUTHORIZED)
+      );
+    }
+
+    const { url } = req.body;
+
+    const estimate = await galleryAnalyzeService.estimateAnalysisV25(
+      req.galleryUser.id,
+      url
+    );
+
+    res.json(ApiResponse.success(estimate));
+  }),
+
+  /**
+   * Execute V2.5 analysis with quota enforcement
+   * POST /api/gallery/analyze/v2.5/confirm
+   */
+  confirmV25: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.galleryUser) {
+      return res.status(httpStatus.UNAUTHORIZED).json(
+        ApiResponse.error('Authentication required', httpStatus.UNAUTHORIZED)
+      );
+    }
+
+    const { url, pipelineType, detailLevel, apiStyle } = req.body;
+
+    const result = await galleryAnalyzeService.executeAnalysisV25(
+      req.galleryUser.id,
+      { url, pipelineType, detailLevel, apiStyle }
+    );
+
+    res.json(ApiResponse.success(result, 'V2.5 analysis completed successfully'));
   })
 };

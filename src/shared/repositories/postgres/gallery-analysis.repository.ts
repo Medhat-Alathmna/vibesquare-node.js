@@ -13,8 +13,8 @@ export class GalleryAnalysisRepository {
     const result = await pgPool.query(
       `INSERT INTO gallery_analyses (
         id, user_id, url, prompt, tokens_used, status, metadata,
-        page_title, page_description, screenshot_url
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        page_title, page_description, screenshot_url, pipeline_type, prd_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *`,
       [
         id,
@@ -26,7 +26,9 @@ export class GalleryAnalysisRepository {
         JSON.stringify(data.metadata || {}),
         data.pageTitle,
         data.pageDescription,
-        data.screenshotUrl
+        data.screenshotUrl,
+        data.pipelineType || 'v1',
+        data.prdId || null
       ]
     );
     return this.mapRow(result.rows[0]);
@@ -89,6 +91,8 @@ export class GalleryAnalysisRepository {
       pageTitle: 'page_title',
       pageDescription: 'page_description',
       screenshotUrl: 'screenshot_url',
+      pipelineType: 'pipeline_type',
+      prdId: 'prd_id',
       completedAt: 'completed_at',
       deletedAt: 'deleted_at'
     };
@@ -180,6 +184,8 @@ export class GalleryAnalysisRepository {
       pageTitle: row.page_title,
       pageDescription: row.page_description,
       screenshotUrl: row.screenshot_url,
+      pipelineType: row.pipeline_type,
+      prdId: row.prd_id,
       createdAt: new Date(row.created_at),
       completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
       deletedAt: row.deleted_at ? new Date(row.deleted_at) : undefined

@@ -437,13 +437,21 @@ export interface TokenDeductionMetadata {
   analysisUrl: string;
   analysisId?: string;
   model?: string;
+  pipelineType?: string;
+  prdId?: string;
 }
 
 // ============================================
 // Gallery Analysis Status
 // ============================================
-export const ANALYSIS_STATUS = ['pending', 'processing', 'completed', 'failed'] as const;
+export const ANALYSIS_STATUS = ['pending', 'processing', 'completed', 'failed', 'partial'] as const;
 export type AnalysisStatus = typeof ANALYSIS_STATUS[number];
+
+// ============================================
+// Analysis Pipeline Types
+// ============================================
+export const PIPELINE_TYPES = ['v1', 'v2', 'v2.5'] as const;
+export type PipelineType = typeof PIPELINE_TYPES[number];
 
 // ============================================
 // Gallery Analysis Interface
@@ -457,6 +465,10 @@ export interface IGalleryAnalysis {
 
   // Output
   prompt?: string;
+
+  // Pipeline Info
+  pipelineType?: PipelineType;
+  prdId?: string;
 
   // Metadata
   tokensUsed: number;
@@ -551,4 +563,24 @@ export interface ActivityLogItem {
   resourceId?: string;
   description: string;
   createdAt: Date;
+}
+
+// ============================================
+// Gallery Analysis V2.5 Result
+// ============================================
+export interface GalleryAnalysisV25Result {
+  analysisId: string;
+  prdId: string;
+  prdMarkdown: string;
+  tokensUsed: number;
+  metadata: {
+    cached?: boolean;
+    cachedAt?: Date;
+    validationScore?: number;
+    qaApproved?: boolean;
+  };
+  quota: {
+    remaining: number;
+    limit: number;
+  };
 }

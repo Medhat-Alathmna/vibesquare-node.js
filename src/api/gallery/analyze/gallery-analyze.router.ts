@@ -80,4 +80,30 @@ router.delete(
   galleryAnalyzeController.delete
 );
 
+/**
+ * @route POST /api/gallery/analyze/v2.5/estimate
+ * @desc Estimate tokens for V2.5 analysis (Visual + Technical Architecture)
+ * @access Private (requires verified email)
+ */
+router.post(
+  '/v2.5/estimate',
+  galleryAuthenticate(),
+  requireGalleryEmailVerified(),
+  validate(galleryAnalyzeValidator.estimateV25),
+  galleryAnalyzeController.estimateV25
+);
+
+/**
+ * @route POST /api/gallery/analyze/v2.5/confirm
+ * @desc Execute V2.5 analysis after user confirmation
+ * @access Private (requires verified email)
+ */
+router.post(
+  '/v2.5/confirm',
+  galleryAuthenticate(),
+  requireGalleryEmailVerified(),
+  validate(galleryAnalyzeValidator.confirmV25),
+  galleryAnalyzeController.confirmV25
+);
+
 export const galleryAnalyzeRouter = router;

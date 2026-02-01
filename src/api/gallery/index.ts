@@ -5,6 +5,7 @@ import { favoritesRouter } from './favorites';
 import { notificationsRouter } from './notifications';
 import { quotaRouter } from './quota';
 import { galleryAnalyzeRouter } from './analyze';
+import { galleryPRDRouter } from './prd/prd.router';
 import { subscriptionRouter } from './subscription';
 import { stripeWebhookRouter } from './webhooks';
 
@@ -27,6 +28,9 @@ router.use('/quota', quotaRouter);
 
 // Analysis Routes (with quota enforcement)
 router.use('/analyze', galleryAnalyzeRouter);
+
+// PRD Routes (Product Requirements Documents from V2.5 analyses)
+router.use('/prd', galleryPRDRouter);
 
 // Subscription Routes (Stripe)
 router.use('/subscription', subscriptionRouter);

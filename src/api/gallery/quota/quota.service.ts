@@ -165,6 +165,39 @@ export class QuotaService {
   }
 
   /**
+   * Refund tokens to user (for partial failures)
+   */
+  async refundTokens(
+    userId: string,
+    amount: number,
+    metadata?: Record<string, any>
+  ): Promise<void> {
+    // Get current usage
+    let usage = await galleryTokenUsageRepository.findByUserId(userId);
+    if (!usage) {
+      // User has no usage record - nothing to refund
+      return;
+    }
+
+    const tokensBefore = usage.tokensUsed;
+    const tokensAfter = Math.max(0, tokensBefore - amount); // Don't go negative
+
+    // Refund tokens (subtract from used)
+    await galleryTokenUsageRepository.incrementTokensUsed(userId, -amount, metadata?.analysisUrl || 'Refund');
+
+    // Log refund transaction
+    await galleryTokenTransactionRepository.create({
+      userId,
+      type: 'refund',
+      tokensAmount: amount, // Positive for refund
+      tokensBefore,
+      tokensAfter,
+      description: metadata?.reason || 'Token refund',
+      metadata: metadata || {}
+    });
+  }
+
+  /**
    * Reset quota for a user (weekly reset)
    */
   async resetQuota(userId: string): Promise<IGalleryTokenUsage> {
