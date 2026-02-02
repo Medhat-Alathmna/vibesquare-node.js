@@ -16,6 +16,17 @@ router.get(
 );
 
 /**
+ * @route GET /api/gallery/prd/check-cache
+ * @desc Check if PRD cache exists for URL (returns minimal info)
+ * @access Private
+ */
+router.get(
+  '/check-cache',
+  galleryAuthenticate(),
+  galleryPRDController.checkCache
+);
+
+/**
  * @route GET /api/gallery/prd/by-url
  * @desc Get PRD by source URL
  * @access Private

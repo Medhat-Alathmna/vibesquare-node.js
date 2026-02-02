@@ -4,6 +4,14 @@ import httpStatus from 'http-status';
 
 export class GalleryPRDService {
   /**
+   * Validate if a string is a valid UUID
+   */
+  private isValidUUID(id: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(id);
+  }
+
+  /**
    * Get PRDs for a specific user with pagination
    */
   async getUserPRDs(userId: string, page = 1, limit = 10) {
@@ -15,16 +23,30 @@ export class GalleryPRDService {
    * Get specific PRD by ID (with user ownership check)
    */
   async getPRDById(userId: string, prdId: string) {
+    // Validate UUID format
+    if (!this.isValidUUID(prdId)) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Invalid PRD ID format. Please provide a valid UUID.`
+      );
+    }
+
     const prdRepo = getPRDRepository();
     const prd = await prdRepo.findById(prdId);
 
     if (!prd) {
-      throw new ApiError(httpStatus.NOT_FOUND, 'PRD not found');
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        `PRD with ID "${prdId}" not found. It may have been deleted or the ID is incorrect.`
+      );
     }
 
-    // Privacy check: user can only see their own PRDs
-    if (prd.userId !== userId) {
-      throw new ApiError(httpStatus.FORBIDDEN, 'Access denied - you can only view your own PRDs');
+    // Privacy check: user can see their own PRDs or public PRDs (user_id = null)
+    if (prd.userId !== null && prd.userId !== userId) {
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        'This PRD belongs to another user. You can only view your own PRDs or public PRDs.'
+      );
     }
 
     return prd;
@@ -60,12 +82,18 @@ export class GalleryPRDService {
     }
 
     if (!prd) {
-      throw new ApiError(httpStatus.NOT_FOUND, 'PRD not found for this URL');
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        `No PRD found for "${sourceUrl}". This URL hasn't been analyzed yet. Please run an analysis first to generate a PRD.`
+      );
     }
 
-    // Privacy check: user can only see their own PRDs
-    if (prd.userId !== userId) {
-      throw new ApiError(httpStatus.FORBIDDEN, 'Access denied - you can only view your own PRDs');
+    // Privacy check: user can see their own PRDs or public PRDs (user_id = null)
+    if (prd.userId !== null && prd.userId !== userId) {
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        'This PRD belongs to another user. You can only view your own PRDs or public PRDs.'
+      );
     }
 
     return prd;
@@ -91,18 +119,75 @@ export class GalleryPRDService {
   }
 
   /**
+   * Check if PRD exists for URL (lightweight cache check)
+   * Returns only basic info without sensitive analysis data
+   * Respects privacy: doesn't leak existence of other users' private PRDs
+   */
+  async checkPRDCache(userId: string, sourceUrl: string) {
+    const prdRepo = getPRDRepository();
+    const normalizedUrl = this.normalizeUrl(sourceUrl);
+
+    // Try to find PRD with same normalization logic as getPRDByUrl
+    let prd = await prdRepo.findBySourceUrl(sourceUrl);
+
+    if (!prd) {
+      const allPrds = await prdRepo.findByUrl(sourceUrl);
+      if (allPrds.length === 0) {
+        const normalizedPrds = await (prdRepo as any).findByNormalizedUrl?.(normalizedUrl);
+        if (normalizedPrds && normalizedPrds.length > 0) {
+          prd = normalizedPrds[0];
+        }
+      } else {
+        prd = allPrds[0]; // Return most recent
+      }
+    }
+
+    // If not found, return not cached
+    if (!prd) {
+      return { cached: false };
+    }
+
+    // Privacy check: only return info for own PRDs or public PRDs (user_id = null)
+    if (prd.userId !== null && prd.userId !== userId) {
+      return { cached: false }; // Don't leak existence of other users' private PRDs
+    }
+
+    // Return minimal info without sensitive data
+    return {
+      cached: true,
+      id: prd.id,
+      sourceUrl: prd.sourceUrl,
+      createdAt: prd.createdAt
+    };
+  }
+
+  /**
    * Delete PRD (with user ownership check)
    */
   async deletePRD(userId: string, prdId: string) {
+    // Validate UUID format
+    if (!this.isValidUUID(prdId)) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Invalid PRD ID format. Please provide a valid UUID.`
+      );
+    }
+
     const prdRepo = getPRDRepository();
     const prd = await prdRepo.findById(prdId);
 
     if (!prd) {
-      throw new ApiError(httpStatus.NOT_FOUND, 'PRD not found');
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        `PRD with ID "${prdId}" not found. It may have already been deleted.`
+      );
     }
 
     if (prd.userId !== userId) {
-      throw new ApiError(httpStatus.FORBIDDEN, 'Access denied - you can only delete your own PRDs');
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        'Cannot delete this PRD. You can only delete your own PRDs.'
+      );
     }
 
     await prdRepo.delete(prdId);

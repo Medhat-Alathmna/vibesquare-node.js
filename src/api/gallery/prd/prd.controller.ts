@@ -100,6 +100,38 @@ export const galleryPRDController = {
   }),
 
   /**
+   * Check if PRD cache exists for URL
+   * GET /api/gallery/prd/check-cache?url=...
+   * Returns minimal info: { cached: boolean, id?, sourceUrl?, createdAt? }
+   */
+  checkCache: asyncHandler(async (req: Request, res: Response) => {
+    if (!req.galleryUser) {
+      return res.status(httpStatus.UNAUTHORIZED).json(
+        ApiResponse.error('Authentication required', httpStatus.UNAUTHORIZED)
+      );
+    }
+
+    let { url } = req.query;
+
+    if (!url || typeof url !== 'string') {
+      return res.status(httpStatus.BAD_REQUEST).json(
+        ApiResponse.error('URL parameter is required', httpStatus.BAD_REQUEST)
+      );
+    }
+
+    // Decode URL in case it was URL-encoded
+    try {
+      url = decodeURIComponent(url);
+    } catch {
+      // If decoding fails, use as-is
+    }
+
+    const cacheInfo = await galleryPRDService.checkPRDCache(req.galleryUser.id, url);
+
+    res.json(ApiResponse.success(cacheInfo));
+  }),
+
+  /**
    * Delete PRD
    * DELETE /api/gallery/prd/:id
    */
