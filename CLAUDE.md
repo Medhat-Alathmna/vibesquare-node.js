@@ -337,3 +337,11 @@ This is orchestrated via LangGraph state machine. Examine `src/api/analyze/v2-5/
 5. **Environment-Driven**: Trust that environment variables are valid (validated at startup)
 6. **Consistent Response Format**: Always use ApiResponse and ApiError classes for consistent API responses
 7. **Dual-Database Awareness**: When modifying repositories, implement changes for both PostgreSQL and MongoDB
+
+
+## Plan Mode / Planning Phase
+
+When the user initiates a "Plan Mode" or asks for planning/architecture design:
+
+1.  **Ask 10 Deep/Probing Questions**: You must strictly ask 10 deep, probing, or ambiguous questions to uncover hidden requirements and ambiguities. Do not proceed until these are discussed.
+2.  **Step-by-Step Execution**: Execute the agreed plan rigorously step-by-step. Do not combine multiple major steps. 
