@@ -10,6 +10,9 @@ import {
   VisualPipelineResult,
   DetailLevel,
   ProductIdentity,
+  InferenceConfidence,
+  CoverageGap,
+  CoverageGapsAnalysis,
   CONFIDENCE_THRESHOLDS,
 } from '../core/technical-agent.types';
 
@@ -60,23 +63,24 @@ export function synthesizePRD(
   // 6. API Documentation
   sections.push(buildAPISection(technicalResult.backendArchitecture));
 
-  // 7. Security Recommendations
-  sections.push(buildSecuritySection(technicalResult.securityRecommendations));
-
-  // 8. Testing Strategy
+  // 7. Testing Strategy
   sections.push(buildTestingSection(technicalResult.testingStrategy));
 
-  // 9. DevOps Configuration
+  // 8. DevOps Configuration
   sections.push(buildDevOpsSection(technicalResult.devopsConfig));
 
-  // 10. Tech Stack Summary
+  // 9. Tech Stack Summary
   sections.push(buildTechStackSection());
 
-  // 11. Confidence Analysis (NEW)
+  // 10. Confidence Analysis
   sections.push(buildConfidenceSection(technicalResult.confidence));
 
-  // 12. Validation Report
+  // 11. Validation Report
   sections.push(buildValidationReportSection(validationScores, qaIterations));
+
+  // 12. Coverage Gaps (from per-inference confidence + skeptic review)
+  const coverageGaps = generateCoverageGaps(technicalResult);
+  sections.push(buildCoverageGapsSection(coverageGaps));
 
   // Footer
   sections.push(`
@@ -874,44 +878,11 @@ ${extractAuthSummary(backendXml)}
 }
 
 /**
- * Build Security section
- */
-function buildSecuritySection(securityXml: string): string {
-  if (!securityXml) {
-    return `## 7. Security Recommendations
-
-> Security recommendations not generated.
-
----
-`;
-  }
-
-  return `## 7. Security Recommendations
-
-### 7.1 Security Configuration (XML)
-
-\`\`\`xml
-${securityXml}
-\`\`\`
-
-### 7.2 OWASP Coverage
-
-${extractOwaspSummary(securityXml)}
-
-### 7.3 Data Protection
-
-${extractDataProtectionSummary(securityXml)}
-
----
-`;
-}
-
-/**
  * Build Testing section
  */
 function buildTestingSection(testingXml: string): string {
   if (!testingXml) {
-    return `## 8. Testing Strategy
+    return `## 7. Testing Strategy
 
 > Testing strategy not generated.
 
@@ -919,15 +890,15 @@ function buildTestingSection(testingXml: string): string {
 `;
   }
 
-  return `## 8. Testing Strategy
+  return `## 7. Testing Strategy
 
-### 8.1 Testing Configuration (XML)
+### 7.1 Testing Configuration (XML)
 
 \`\`\`xml
 ${testingXml}
 \`\`\`
 
-### 8.2 Test Suites
+### 7.2 Test Suites
 
 ${extractTestSuitesSummary(testingXml)}
 
@@ -940,7 +911,7 @@ ${extractTestSuitesSummary(testingXml)}
  */
 function buildDevOpsSection(devopsXml: string): string {
   if (!devopsXml) {
-    return `## 9. DevOps Configuration
+    return `## 8. DevOps Configuration
 
 > DevOps configuration not generated.
 
@@ -948,29 +919,29 @@ function buildDevOpsSection(devopsXml: string): string {
 `;
   }
 
-  return `## 9. DevOps Configuration
+  return `## 8. DevOps Configuration
 
-### 9.1 DevOps Configuration (XML)
+### 8.1 DevOps Configuration (XML)
 
 \`\`\`xml
 ${devopsXml}
 \`\`\`
 
-### 9.2 Services
+### 8.2 Services
 
 ${extractServicesSummary(devopsXml)}
 
-### 9.3 Hosting Recommendations
+### 8.3 Hosting Recommendations
 
 ${extractHostingSummary(devopsXml)}
 
-### 9.4 Analytics & KPIs
+### 8.4 Analytics & KPIs
 
 > Critical for AI Vibe Coders to understand success metrics and tracking requirements.
 
 ${extractAnalyticsSummary(devopsXml)}
 
-### 9.5 Observability & Monitoring
+### 8.5 Observability & Monitoring
 
 ${extractObservabilitySummary(devopsXml)}
 
@@ -1117,7 +1088,7 @@ ${alertMatches.map((alert) => {
  * Build Tech Stack section
  */
 function buildTechStackSection(): string {
-  return `## 10. Tech Stack Summary
+  return `## 9. Tech Stack Summary
 
 | Layer | Technology |
 |-------|------------|
@@ -1144,7 +1115,7 @@ function buildConfidenceSection(confidence?: {
   clarificationNeeded: boolean;
 }): string {
   if (!confidence) {
-    return `## 11. Confidence Analysis
+    return `## 10. Confidence Analysis
 
 > Confidence scoring not available for this analysis.
 
@@ -1177,23 +1148,23 @@ function buildConfidenceSection(confidence?: {
     })
     .join('\n');
 
-  return `## 11. Confidence Analysis
+  return `## 10. Confidence Analysis
 
 > This section shows how confident the AI analysis is about each part of the PRD.
 
-### 11.1 Overall Confidence
+### 10.1 Overall Confidence
 
 ${confidenceIcon} **${overallScore}%** - ${confidenceLevel} Confidence
 
 ${clarificationNeeded ? `⚠️ **Clarification Recommended**: Some areas may benefit from additional context or user input.` : '✅ **Analysis Complete**: Confidence level is acceptable for implementation.'}
 
-### 11.2 Agent Confidence Scores
+### 10.2 Agent Confidence Scores
 
 | Agent | Score |
 |-------|-------|
 ${agentScoresTable || '| N/A | N/A |'}
 
-### 11.3 Low Confidence Areas
+### 10.3 Low Confidence Areas
 
 ${lowConfidenceAreas.length > 0
     ? `The following areas had lower confidence and may need review:
@@ -1201,7 +1172,7 @@ ${lowConfidenceAreas.length > 0
 ${lowConfidenceAreas.map((area) => `- ⚠️ ${area}`).join('\n')}`
     : '✅ No significant low-confidence areas identified.'}
 
-### 11.4 Confidence Thresholds
+### 10.4 Confidence Thresholds
 
 | Level | Threshold | Meaning |
 |-------|-----------|---------|
@@ -1220,7 +1191,7 @@ function buildValidationReportSection(
   scores: { completeness: number; consistency: number; security: number; implementability: number; overall: number },
   qaIterations: number
 ): string {
-  return `## 12. Validation Report
+  return `## 11. Validation Report
 
 | Metric | Score |
 |--------|-------|
@@ -1317,26 +1288,6 @@ function extractAuthSummary(xml: string): string {
 - **Refresh Token Expiry:** ${refreshExpiry}`;
 }
 
-function extractOwaspSummary(xml: string): string {
-  const risks = xml.match(/<risk\s+name="([^"]+)"/g) || [];
-  if (risks.length === 0) return 'OWASP coverage not specified.';
-
-  return risks
-    .map((r) => {
-      const name = r.match(/name="([^"]+)"/)?.[1] || '';
-      return `- ✅ ${name}`;
-    })
-    .join('\n');
-}
-
-function extractDataProtectionSummary(xml: string): string {
-  const atRest = xml.match(/atRest="([^"]+)"/)?.[1] || 'true';
-  const inTransit = xml.match(/inTransit="([^"]+)"/)?.[1] || 'true';
-
-  return `- **Encryption at Rest:** ${atRest === 'true' ? 'Yes' : 'No'}
-- **Encryption in Transit:** ${inTransit === 'true' ? 'Yes (TLS)' : 'No'}`;
-}
-
 function extractTestSuitesSummary(xml: string): string {
   const suites = xml.match(/<suite\s+name="([^"]+)"/g) || [];
   const resourceSuites = xml.match(/<suite\s+resource="([^"]+)"/g) || [];
@@ -1373,6 +1324,160 @@ function extractHostingSummary(xml: string): string {
       return `- **${provider}**`;
     })
     .join('\n');
+}
+
+// ============ Coverage Gaps ============
+
+/**
+ * Generate coverage gaps from per-inference confidence data and skeptic review
+ */
+function generateCoverageGaps(result: TechnicalPipelineResult): CoverageGapsAnalysis {
+  const gaps: CoverageGap[] = [];
+  const allInferences = result.confidence?.inferences || [];
+
+  // 1. Low-confidence inferences (< 0.5)
+  const lowConfInferences = allInferences.filter((i) => i.confidence < 0.5);
+  for (const inf of lowConfInferences) {
+    gaps.push({
+      area: inf.source,
+      description: inf.inference,
+      reason: `Low confidence (${(inf.confidence * 100).toFixed(0)}%) — may not match actual requirements`,
+      category: 'low_confidence',
+      suggestedAction: 'Verify with stakeholders or provide additional UI screenshots',
+    });
+  }
+
+  // 2. Inferences flagged for human review (no evidence)
+  const humanReviewInferences = allInferences.filter((i) => i.humanReviewNeeded);
+  const noEvidenceInferences = humanReviewInferences.filter(
+    (i) => i.evidence.length === 0 && i.confidence >= 0.5
+  );
+  for (const inf of noEvidenceInferences) {
+    gaps.push({
+      area: inf.source,
+      description: inf.inference,
+      reason: 'No visual evidence cited for this inference',
+      category: 'no_evidence',
+      suggestedAction: 'Confirm this requirement exists or remove from specification',
+    });
+  }
+
+  // 3. Skeptic-challenged items (parse from skepticReview XML if present)
+  const challengedItems: string[] = [];
+  if (result.skepticReview) {
+    const challengeRegex = /<inference>([\s\S]*?)<\/inference>/g;
+    let match;
+    while ((match = challengeRegex.exec(result.skepticReview)) !== null) {
+      const inference = match[1].trim();
+      if (inference) {
+        challengedItems.push(inference);
+        gaps.push({
+          area: 'Skeptic Review',
+          description: inference,
+          reason: 'Challenged by Skeptic Agent as potentially unsupported',
+          category: 'challenged',
+          suggestedAction: 'Review evidence and confirm or revise this assumption',
+        });
+      }
+    }
+  }
+
+  // 4. Standard business logic gaps (areas that UI analysis commonly misses)
+  const standardGaps: Array<{ area: string; description: string }> = [
+    { area: 'Pricing & Billing', description: 'Pricing rules, subscription tiers, payment processing logic' },
+    { area: 'Notification System', description: 'Email/push notification triggers, templates, and delivery rules' },
+    { area: 'Data Migration', description: 'Migration strategy from existing systems (if applicable)' },
+    { area: 'Permission Matrix', description: 'Detailed role-permission mappings beyond basic RBAC' },
+    { area: 'Rate Limits & Quotas', description: 'Per-user and per-tier rate limits for API endpoints' },
+  ];
+
+  for (const sg of standardGaps) {
+    // Check if any inference covers this area
+    const covered = allInferences.some(
+      (i) => i.inference.toLowerCase().includes(sg.area.toLowerCase().split(' ')[0])
+    );
+    if (!covered) {
+      gaps.push({
+        area: sg.area,
+        description: sg.description,
+        reason: 'Not detected in visual analysis — requires explicit specification',
+        category: 'business_logic',
+        suggestedAction: 'Define requirements if applicable to your product',
+      });
+    }
+  }
+
+  return {
+    gaps,
+    humanReviewInferences,
+    challengedItems,
+    counts: {
+      total: gaps.length,
+      lowConfidence: lowConfInferences.length,
+      noEvidence: noEvidenceInferences.length,
+      challenged: challengedItems.length,
+      businessLogic: gaps.filter((g) => g.category === 'business_logic').length,
+    },
+  };
+}
+
+/**
+ * Build Coverage Gaps section for the PRD
+ */
+function buildCoverageGapsSection(analysis: CoverageGapsAnalysis): string {
+  if (analysis.gaps.length === 0) {
+    return `## 12. Coverage Gaps & Limitations
+
+> No significant coverage gaps identified. All inferences have supporting evidence.
+
+---
+`;
+  }
+
+  const { counts } = analysis;
+
+  // Build gap table
+  const gapRows = analysis.gaps
+    .slice(0, 20) // Limit to top 20
+    .map((g) => {
+      const icon = g.category === 'low_confidence' ? '🔴'
+        : g.category === 'no_evidence' ? '🟡'
+        : g.category === 'challenged' ? '⚠️'
+        : '📋';
+      return `| ${icon} ${g.category} | ${g.area} | ${g.description.substring(0, 80)} | ${g.suggestedAction.substring(0, 60)} |`;
+    })
+    .join('\n');
+
+  return `## 12. Coverage Gaps & Limitations
+
+> This section identifies areas where the AI analysis is uncertain, unsupported, or incomplete.
+> These gaps should be reviewed by stakeholders before implementation.
+
+### 12.1 Gap Summary
+
+| Category | Count |
+|----------|-------|
+| 🔴 Low Confidence Inferences | ${counts.lowConfidence} |
+| 🟡 No Visual Evidence | ${counts.noEvidence} |
+| ⚠️ Challenged by Skeptic | ${counts.challenged} |
+| 📋 Missing Business Logic | ${counts.businessLogic} |
+| **Total** | **${counts.total}** |
+
+### 12.2 Gap Details
+
+| Type | Area | Description | Suggested Action |
+|------|------|-------------|-----------------|
+${gapRows}
+
+### 12.3 What This Means
+
+- **Low Confidence**: The AI inferred these items but isn't sure they're correct. Verify before implementing.
+- **No Evidence**: These items were generated without direct visual support. They may be hallucinated.
+- **Challenged**: The Skeptic Agent flagged these as potentially wrong or over-specified.
+- **Business Logic**: Standard requirements that visual analysis can't detect. Define manually if needed.
+
+---
+`;
 }
 
 export default synthesizePRD;

@@ -309,7 +309,6 @@ export class AnalyzeService {
         : undefined,
       databaseSchema: technicalResult?.databaseSchema,
       backendArchitecture: technicalResult?.backendArchitecture,
-      securityRecommendations: technicalResult?.securityRecommendations,
       testingStrategy: technicalResult?.testingStrategy,
       devopsConfig: technicalResult?.devopsConfig,
       validationResult: technicalResult?.validationResult,

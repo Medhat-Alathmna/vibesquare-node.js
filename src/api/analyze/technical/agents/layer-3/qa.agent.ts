@@ -70,16 +70,18 @@ ${previousOutputs?.databaseSchema?.substring(0, 1500) || 'NOT PROVIDED'}${(previ
 ${previousOutputs?.backendArchitecture?.substring(0, 2000) || 'NOT PROVIDED'}${(previousOutputs?.backendArchitecture?.length || 0) > 2000 ? '...' : ''}
 \`\`\`
 
-### Security Recommendations:
-\`\`\`xml
-${previousOutputs?.securityRecommendations?.substring(0, 1000) || 'NOT PROVIDED'}${(previousOutputs?.securityRecommendations?.length || 0) > 1000 ? '...' : ''}
-\`\`\`
-
 ### Validation Results:
 \`\`\`xml
 ${previousOutputs?.validationResult?.substring(0, 1500) || 'NOT PROVIDED'}${(previousOutputs?.validationResult?.length || 0) > 1500 ? '...' : ''}
 \`\`\`
 
+${previousOutputs?.skepticReview ? `### Skeptic Review (Challenged Assumptions):
+\`\`\`xml
+${previousOutputs.skepticReview.substring(0, 1500)}${previousOutputs.skepticReview.length > 1500 ? '...' : ''}
+\`\`\`
+
+**IMPORTANT**: The Skeptic Agent has flagged potential issues above. You MUST verify that high-severity challenges have been addressed or have sufficient evidence to dismiss.
+` : ''}
 ---
 
 ## QA Instructions

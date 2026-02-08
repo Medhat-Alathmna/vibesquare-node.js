@@ -26,6 +26,7 @@ import {
   TechnicalSpirit,
   AgentConfidenceScore,
   ConfidenceBreakdown,
+  InferenceConfidence,
   getConfidenceLevel,
   CONFIDENCE_THRESHOLDS,
 } from '../../core/technical-agent.types';
@@ -250,6 +251,94 @@ Rate your confidence in this analysis (0-100).`;
       identity,
       confidence,
     };
+  }
+
+  /**
+   * Extract per-inference confidence from identity analysis.
+   * Creates inferences for each core entity and critical flow identified.
+   */
+  protected extractInferences(data: IdentityAgentOutput, xmlContent: string): InferenceConfidence[] {
+    const inferences: InferenceConfidence[] = [];
+    const { identity, confidence } = data;
+    const baseConfidence = confidence / 100; // Normalize 0-100 to 0-1
+
+    // Parse LLM-provided evidence from XML
+    const evidenceMap = this.parseEvidenceFromXML(xmlContent);
+
+    // Helper to find matching evidence by keyword overlap
+    const findEvidence = (keyword: string): { confidence: number; evidence: string[]; alternatives: string[] } | undefined => {
+      const lower = keyword.toLowerCase();
+      for (const [key, val] of evidenceMap) {
+        if (key.includes(lower) || lower.includes(key)) return val;
+      }
+      return undefined;
+    };
+
+    // Inferences for each core entity
+    for (const entity of identity.aiCoderContext.coreEntities) {
+      const llmEvidence = findEvidence(entity);
+      const conf = llmEvidence
+        ? Math.min(1, llmEvidence.confidence)
+        : Math.min(1, baseConfidence + 0.1);
+      inferences.push({
+        inference: `Core domain entity: ${entity}`,
+        confidence: parseFloat(conf.toFixed(2)),
+        level: conf >= 0.8 ? 'high' : conf >= 0.5 ? 'medium' : 'low',
+        evidence: llmEvidence?.evidence || [],
+        alternatives: llmEvidence?.alternatives || [],
+        humanReviewNeeded: !llmEvidence || llmEvidence.evidence.length === 0,
+        source: 'IdentityAgent',
+      });
+    }
+
+    // Inferences for each critical flow
+    for (const flow of identity.aiCoderContext.criticalFlows) {
+      const llmEvidence = findEvidence(flow);
+      const conf = llmEvidence
+        ? Math.min(1, llmEvidence.confidence)
+        : Math.min(1, baseConfidence);
+      inferences.push({
+        inference: `Critical user flow: ${flow}`,
+        confidence: parseFloat(conf.toFixed(2)),
+        level: conf >= 0.8 ? 'high' : conf >= 0.5 ? 'medium' : 'low',
+        evidence: llmEvidence?.evidence || [],
+        alternatives: llmEvidence?.alternatives || [],
+        humanReviewNeeded: !llmEvidence || llmEvidence.evidence.length === 0,
+        source: 'IdentityAgent',
+      });
+    }
+
+    // Inference for product vision
+    const visionEvidence = findEvidence('vision');
+    const visionConf = visionEvidence
+      ? visionEvidence.confidence
+      : (identity.vision.statement.length > 50 ? baseConfidence : baseConfidence * 0.7);
+    inferences.push({
+      inference: `Product vision: ${identity.vision.statement.substring(0, 100)}`,
+      confidence: parseFloat(Math.min(1, visionConf).toFixed(2)),
+      level: visionConf >= 0.8 ? 'high' : visionConf >= 0.5 ? 'medium' : 'low',
+      evidence: visionEvidence?.evidence || [],
+      alternatives: visionEvidence?.alternatives || [],
+      humanReviewNeeded: !visionEvidence || visionEvidence.evidence.length === 0,
+      source: 'IdentityAgent',
+    });
+
+    // Inference for core problem
+    const problemEvidence = findEvidence('problem');
+    const problemConf = problemEvidence
+      ? problemEvidence.confidence
+      : (identity.problemStatement.coreProblem.length > 30 ? baseConfidence : baseConfidence * 0.6);
+    inferences.push({
+      inference: `Core problem: ${identity.problemStatement.coreProblem.substring(0, 100)}`,
+      confidence: parseFloat(Math.min(1, problemConf).toFixed(2)),
+      level: problemConf >= 0.8 ? 'high' : problemConf >= 0.5 ? 'medium' : 'low',
+      evidence: problemEvidence?.evidence || [],
+      alternatives: problemEvidence?.alternatives || [],
+      humanReviewNeeded: !problemEvidence || problemEvidence.evidence.length === 0,
+      source: 'IdentityAgent',
+    });
+
+    return inferences;
   }
 
   /**

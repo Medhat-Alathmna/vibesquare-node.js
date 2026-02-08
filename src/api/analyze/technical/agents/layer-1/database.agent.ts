@@ -16,6 +16,7 @@ import {
   TechnicalAgentInput,
   DatabaseAgentOutput,
   DatabaseAgentOutputSchema,
+  InferenceConfidence,
 } from '../../core/technical-agent.types';
 import { TECHNICAL_AGENT_CONFIGS } from '../../core/technical-agent-config';
 
@@ -157,6 +158,78 @@ Output the complete XML schema following the format specified in the system prom
       relations,
       enums,
     };
+  }
+
+  /**
+   * Extract per-inference confidence from database schema.
+   * Creates inferences for each entity, relation, and enum.
+   */
+  protected extractInferences(data: DatabaseAgentOutput, xmlContent: string): InferenceConfidence[] {
+    const inferences: InferenceConfidence[] = [];
+
+    // Parse LLM-provided evidence from XML
+    const evidenceMap = this.parseEvidenceFromXML(xmlContent);
+
+    const findEvidence = (keyword: string) => {
+      const lower = keyword.toLowerCase();
+      for (const [key, val] of evidenceMap) {
+        if (key.includes(lower) || lower.includes(key)) return val;
+      }
+      return undefined;
+    };
+
+    // Standard entities that are high-confidence (common in most apps)
+    const commonEntities = ['user', 'users', 'role', 'roles', 'session', 'sessions', 'account', 'accounts'];
+
+    // Per-entity inferences
+    for (const entity of data.entities) {
+      const isCommon = commonEntities.includes(entity.toLowerCase());
+      const llmEvidence = findEvidence(entity);
+      const conf = llmEvidence
+        ? llmEvidence.confidence
+        : (isCommon ? 0.9 : 0.65);
+      inferences.push({
+        inference: `Database entity: ${entity}`,
+        confidence: parseFloat(conf.toFixed(2)),
+        level: conf >= 0.8 ? 'high' : conf >= 0.5 ? 'medium' : 'low',
+        evidence: llmEvidence?.evidence || [],
+        alternatives: llmEvidence?.alternatives || [],
+        humanReviewNeeded: !isCommon && (!llmEvidence || llmEvidence.evidence.length === 0),
+        source: 'DatabaseAgent',
+      });
+    }
+
+    // Per-relation inferences (relations are more speculative)
+    for (const relation of data.relations) {
+      const llmEvidence = findEvidence(relation.split('→')[0]?.trim() || relation);
+      const conf = llmEvidence ? llmEvidence.confidence : 0.6;
+      inferences.push({
+        inference: `Database relation: ${relation}`,
+        confidence: parseFloat(conf.toFixed(2)),
+        level: conf >= 0.8 ? 'high' : conf >= 0.5 ? 'medium' : 'low',
+        evidence: llmEvidence?.evidence || [],
+        alternatives: llmEvidence?.alternatives || [],
+        humanReviewNeeded: !llmEvidence || llmEvidence.evidence.length === 0,
+        source: 'DatabaseAgent',
+      });
+    }
+
+    // Per-enum inferences
+    for (const enumName of data.enums) {
+      const llmEvidence = findEvidence(enumName);
+      const conf = llmEvidence ? llmEvidence.confidence : 0.7;
+      inferences.push({
+        inference: `Enum type: ${enumName}`,
+        confidence: parseFloat(conf.toFixed(2)),
+        level: conf >= 0.8 ? 'high' : conf >= 0.5 ? 'medium' : 'low',
+        evidence: llmEvidence?.evidence || [],
+        alternatives: llmEvidence?.alternatives || [],
+        humanReviewNeeded: false,
+        source: 'DatabaseAgent',
+      });
+    }
+
+    return inferences;
   }
 }
 

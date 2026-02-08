@@ -87,6 +87,7 @@ export interface IdentityAgentOutput {
   xml: string;
   identity: ProductIdentity;
   confidence: number;       // 0-100 درجة الثقة في الاستنتاج
+  inferences?: InferenceConfidence[];
 }
 
 export interface TechnicalPipelineOptions {
@@ -152,11 +153,11 @@ export interface TechnicalAgentInput {
     identity?: string; // XML - Layer 0 output
     databaseSchema?: string; // XML
     backendArchitecture?: string; // XML
-    securityRecommendations?: string; // XML
     testingStrategy?: string; // XML
     devopsConfig?: string; // XML
     validationResult?: string; // XML
     userStories?: string; // XML
+    skepticReview?: string; // XML - Skeptic Agent output
   };
   // Parsed identity for quick access (optional)
   productIdentity?: ProductIdentity;
@@ -169,6 +170,7 @@ export interface DatabaseAgentOutput {
   entities: string[]; // Entity names for quick reference
   relations: string[]; // Relation descriptions
   enums: string[]; // Enum names
+  inferences?: InferenceConfidence[];
 }
 
 export interface BackendAgentOutput {
@@ -183,21 +185,7 @@ export interface BackendAgentOutput {
     runtime: string;
     apiStyle: APIStyle;
   };
-}
-
-export interface SecurityRequirement {
-  name: string;
-  riskPriority: 'critical' | 'high' | 'medium' | 'low';
-  implementationPriority: ImplementationPriority;
-  description: string;
-  implementation?: string;
-}
-
-export interface SecurityAgentOutput {
-  xml: string;
-  owaspCoverage: string[];
-  securityScore: number;
-  requirements?: SecurityRequirement[];
+  inferences?: InferenceConfidence[];
 }
 
 export interface TestingAgentOutput {
@@ -527,6 +515,40 @@ export interface QAAgentOutput {
   finalApproval: boolean;
 }
 
+export interface SkepticAgentOutput {
+  xml: string;
+  challengedInferences: Array<{
+    inference: string;
+    challenge: string;
+    severity: 'high' | 'medium' | 'low';
+    alternativeInterpretation?: string;
+  }>;
+  overConfidenceFlags: Array<{
+    area: string;
+    currentConfidence: string;
+    justification: string;
+  }>;
+  highRiskAssumptions: string[];
+  summary: string;
+}
+
+export const SkepticAgentOutputSchema = z.object({
+  xml: z.string().min(1),
+  challengedInferences: z.array(z.object({
+    inference: z.string(),
+    challenge: z.string(),
+    severity: z.enum(['high', 'medium', 'low']),
+    alternativeInterpretation: z.string().optional(),
+  })),
+  overConfidenceFlags: z.array(z.object({
+    area: z.string(),
+    currentConfidence: z.string(),
+    justification: z.string(),
+  })),
+  highRiskAssumptions: z.array(z.string()),
+  summary: z.string(),
+});
+
 // ============ Technical Pipeline Result ============
 
 export interface TechnicalPipelineResult {
@@ -535,11 +557,11 @@ export interface TechnicalPipelineResult {
   identityConfidence?: number;  // Layer 0 confidence score
   databaseSchema: string;
   backendArchitecture: string;
-  securityRecommendations: string;
   testingStrategy: string;
   devopsConfig: string;
   userStories: string;
   validationResult: string;
+  skepticReview?: string;
   qaReview: string;
 
   // Parsed summaries
@@ -547,7 +569,6 @@ export interface TechnicalPipelineResult {
     identity: IdentityAgentOutput;  // Layer 0
     database: DatabaseAgentOutput;
     backend: BackendAgentOutput;
-    security: SecurityAgentOutput;
     testing: TestingAgentOutput;
     devops: DevOpsAgentOutput;
     userStory: EnhancedUserStoryAgentOutput;
@@ -564,6 +585,8 @@ export interface TechnicalPipelineResult {
     agentScores: Record<string, number>;
     lowConfidenceAreas: string[];
     clarificationNeeded: boolean;
+    inferences?: InferenceConfidence[];
+    agentInferences?: Record<string, AgentInferenceCollection>;
   };
 
   // Metadata
@@ -668,21 +691,6 @@ export const BackendAgentOutputSchema = z.object({
     runtime: z.string(),
     apiStyle: z.string(),
   }),
-});
-
-export const SecurityRequirementSchema = z.object({
-  name: z.string(),
-  riskPriority: z.enum(['critical', 'high', 'medium', 'low']),
-  implementationPriority: z.enum(['must_have', 'nice_to_have', 'later']),
-  description: z.string(),
-  implementation: z.string().optional(),
-});
-
-export const SecurityAgentOutputSchema = z.object({
-  xml: z.string().min(1),
-  owaspCoverage: z.array(z.string()),
-  securityScore: z.number().min(0).max(100),
-  requirements: z.array(SecurityRequirementSchema).optional(),
 });
 
 export const TestingAgentOutputSchema = z.object({
@@ -954,11 +962,11 @@ export interface TechnicalAgentStatusMap {
   identity: TechnicalAgentStatus;  // Layer 0
   database: TechnicalAgentStatus;  // Layer 1
   backend: TechnicalAgentStatus;   // Layer 2
-  security: TechnicalAgentStatus;  // Layer 2
   testing: TechnicalAgentStatus;   // Layer 2
   devops: TechnicalAgentStatus;    // Layer 2
   userStory: TechnicalAgentStatus; // Layer 2
   prdValidator: TechnicalAgentStatus;  // Layer 3
+  skeptic: TechnicalAgentStatus;       // Layer 3
   qa: TechnicalAgentStatus;            // Layer 3
   prdSynthesizer: TechnicalAgentStatus;
 }
@@ -1061,6 +1069,80 @@ export function needsClarification(score: number, threshold = CONFIDENCE_THRESHO
   return score < threshold;
 }
 
+// ============ Per-Inference Confidence System ============
+
+/**
+ * Structured confidence for a single inference.
+ * Each inference represents one conclusion drawn by an agent
+ * (e.g., "Entity X exists", "Endpoint Y is needed").
+ */
+export interface InferenceConfidence {
+  inference: string;           // What was inferred (e.g., "Orders entity from checkout form")
+  confidence: number;          // 0-1 scale
+  level: ConfidenceLevel;      // Derived from confidence score
+  evidence: string[];          // Visual signals that support this inference
+  alternatives: string[];      // Other possible interpretations
+  humanReviewNeeded: boolean;  // Flag for low confidence inferences
+  source: string;              // Which agent produced this (e.g., "DatabaseAgent")
+}
+
+/**
+ * Collection of inferences from a single agent
+ */
+export interface AgentInferenceCollection {
+  agentName: string;
+  inferences: InferenceConfidence[];
+  overallConfidence: number;
+  highConfidenceCount: number;
+  lowConfidenceCount: number;
+  humanReviewItems: InferenceConfidence[];
+}
+
+// Zod schemas for inference confidence
+export const InferenceConfidenceSchema = z.object({
+  inference: z.string(),
+  confidence: z.number().min(0).max(1),
+  level: z.enum(['high', 'medium', 'low']),
+  evidence: z.array(z.string()),
+  alternatives: z.array(z.string()),
+  humanReviewNeeded: z.boolean(),
+  source: z.string(),
+});
+
+export const AgentInferenceCollectionSchema = z.object({
+  agentName: z.string(),
+  inferences: z.array(InferenceConfidenceSchema),
+  overallConfidence: z.number(),
+  highConfidenceCount: z.number(),
+  lowConfidenceCount: z.number(),
+  humanReviewItems: z.array(InferenceConfidenceSchema),
+});
+
+// ============ Coverage Gaps ============
+
+export type CoverageGapCategory = 'low_confidence' | 'no_evidence' | 'challenged' | 'business_logic' | 'integration';
+
+export interface CoverageGap {
+  area: string;
+  description: string;
+  reason: string;
+  category: CoverageGapCategory;
+  suggestedAction: string;
+}
+
+export interface CoverageGapsAnalysis {
+  gaps: CoverageGap[];
+  humanReviewInferences: InferenceConfidence[];
+  challengedItems: string[];
+  counts: {
+    total: number;
+    lowConfidence: number;
+    noEvidence: number;
+    challenged: number;
+    businessLogic: number;
+  };
+}
+
 // ============ Model Fallback System ============
 
 /**
@@ -1136,11 +1218,6 @@ export const DEFAULT_AGENT_MODEL_CONFIGS: Record<string, AgentModelConfig> = {
   },
 
   // Non-critical agents - Use Flash for cost savings
-  security: {
-    primary: 'flash',
-    fallbacks: [],
-    requireUserApprovalForFallback: true,  // Ask before using more expensive model
-  },
   testing: {
     primary: 'flash',
     fallbacks: [],

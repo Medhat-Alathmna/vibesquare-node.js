@@ -18,6 +18,7 @@ import {
   ClarificationQuestion,
   ClarificationResponse,
   AgentConfidenceScore,
+  InferenceConfidence,
   CONFIDENCE_THRESHOLDS,
 } from '../core/technical-agent.types';
 
@@ -85,11 +86,6 @@ export const TechnicalGraphState = Annotation.Root({
     default: () => undefined,
   }),
 
-  securityRecommendations: Annotation<string | undefined>({
-    reducer: (_, next) => next,
-    default: () => undefined,
-  }),
-
   testingStrategy: Annotation<string | undefined>({
     reducer: (_, next) => next,
     default: () => undefined,
@@ -107,6 +103,11 @@ export const TechnicalGraphState = Annotation.Root({
 
   // Layer 3 outputs
   validationResult: Annotation<string | undefined>({
+    reducer: (_, next) => next,
+    default: () => undefined,
+  }),
+
+  skepticReview: Annotation<string | undefined>({
     reducer: (_, next) => next,
     default: () => undefined,
   }),
@@ -134,6 +135,12 @@ export const TechnicalGraphState = Annotation.Root({
     default: () => undefined,
   }),
 
+  // Per-inference confidence (accumulative from all agents)
+  allInferences: Annotation<InferenceConfidence[]>({
+    reducer: (current, next) => [...current, ...next],
+    default: () => [],
+  }),
+
   // Errors (accumulative)
   errors: Annotation<TechnicalAgentError[]>({
     reducer: (current, next) => [...current, ...next],
@@ -147,11 +154,11 @@ export const TechnicalGraphState = Annotation.Root({
       identity: 'pending',
       database: 'pending',
       backend: 'pending',
-      security: 'pending',
       testing: 'pending',
       devops: 'pending',
       userStory: 'pending',
       prdValidator: 'pending',
+      skeptic: 'pending',
       qa: 'pending',
       prdSynthesizer: 'pending',
     }),
@@ -218,25 +225,26 @@ export function createInitialTechnicalState(
     identityConfidence: 0,
     databaseSchema: undefined,
     backendArchitecture: undefined,
-    securityRecommendations: undefined,
     testingStrategy: undefined,
     devopsConfig: undefined,
     userStories: undefined,
     validationResult: undefined,
+    skepticReview: undefined,
     qaReview: undefined,
     qaIterations: 0,
     qaApproved: false,
     finalPRD: undefined,
+    allInferences: [],
     errors: [],
     agentStatus: {
       identity: 'pending',
       database: 'pending',
       backend: 'pending',
-      security: 'pending',
       testing: 'pending',
       devops: 'pending',
       userStory: 'pending',
       prdValidator: 'pending',
+      skeptic: 'pending',
       qa: 'pending',
       prdSynthesizer: 'pending',
     },
@@ -281,11 +289,11 @@ export function getCompletedTechnicalAgents(state: TechnicalGraphStateType): str
   if (state.agentStatus.identity === 'completed') completed.push('identity');
   if (state.agentStatus.database === 'completed') completed.push('database');
   if (state.agentStatus.backend === 'completed') completed.push('backend');
-  if (state.agentStatus.security === 'completed') completed.push('security');
   if (state.agentStatus.testing === 'completed') completed.push('testing');
   if (state.agentStatus.devops === 'completed') completed.push('devops');
   if (state.agentStatus.userStory === 'completed') completed.push('userStory');
   if (state.agentStatus.prdValidator === 'completed') completed.push('prdValidator');
+  if (state.agentStatus.skeptic === 'completed') completed.push('skeptic');
   if (state.agentStatus.qa === 'completed') completed.push('qa');
   if (state.agentStatus.prdSynthesizer === 'completed') completed.push('prdSynthesizer');
 
@@ -318,7 +326,7 @@ export function isLayer1Complete(state: TechnicalGraphStateType): boolean {
  * Check if Layer 2 is complete
  */
 export function isLayer2Complete(state: TechnicalGraphStateType): boolean {
-  const layer2Agents = ['backend', 'security', 'testing', 'devops', 'userStory'] as const;
+  const layer2Agents = ['backend', 'testing', 'devops', 'userStory'] as const;
 
   // At least backend must complete (it's the most important)
   if (state.agentStatus.backend !== 'completed' && state.agentStatus.backend !== 'skipped') {

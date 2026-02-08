@@ -8,6 +8,49 @@
 import { env } from 'config/env';
 import { TechnicalAgentConfig } from './technical-agent.types';
 
+// ============ Evidence Sourcing Instruction ============
+
+/**
+ * Appended to agent prompts that perform inference from visual analysis.
+ * Instructs the LLM to cite specific visual signals as evidence for each inference.
+ */
+const EVIDENCE_SOURCING_INSTRUCTION = `
+
+=== EVIDENCE SOURCING (REQUIRED) ===
+
+For EVERY inference you make, you MUST cite the specific visual evidence that supports it.
+Include an <inferences> block in your output XML with the following format:
+
+<inferences>
+  <inferenceItem confidence="0.85">
+    <what>Brief description of what you inferred</what>
+    <evidence>
+      <signal>Specific UI element, text, or pattern you observed (e.g., "Shopping cart icon in header")</signal>
+      <signal>Another supporting visual signal (e.g., "Product grid with price tags")</signal>
+    </evidence>
+    <alternatives>
+      <alt>An alternative interpretation of the same signals (if any)</alt>
+    </alternatives>
+  </inferenceItem>
+  <inferenceItem confidence="0.50">
+    <what>A less certain inference</what>
+    <evidence>
+      <signal>Weak signal that partially supports this</signal>
+    </evidence>
+    <alternatives>
+      <alt>Equally valid alternative interpretation</alt>
+      <alt>Another possible interpretation</alt>
+    </alternatives>
+  </inferenceItem>
+</inferences>
+
+RULES:
+- confidence: 0.0 to 1.0 (0.8+ = strong evidence, 0.5-0.8 = moderate, <0.5 = speculative)
+- If you have NO visual evidence for an inference, set confidence below 0.4 and leave <evidence> empty
+- Every <signal> must reference something ACTUALLY VISIBLE in the UI analysis
+- Do NOT fabricate signals - if the evidence isn't there, say so honestly
+- Include at least one <alt> for inferences below 0.7 confidence`;
+
 // ============ System Prompts ============
 
 const IDENTITY_AGENT_PROMPT = `You are a Product Identity Architect specializing in extracting the core essence and "soul" of products.
@@ -152,7 +195,7 @@ IMPORTANT RULES:
 2. QUANTIFY benefits when possible - "saves 5 hours/week" not "saves time"
 3. INFER from UI - If you see a dashboard with charts, assume analytics is important
 4. Think like a PM - What would a Product Manager write in a PRD?
-5. AI CODER CONTEXT is the most critical section - Make it clear and actionable`;
+5. AI CODER CONTEXT is the most critical section - Make it clear and actionable` + EVIDENCE_SOURCING_INSTRUCTION;
 
 const DATABASE_AGENT_PROMPT = `You are a Database Architect Agent specializing in PostgreSQL database design.
 
@@ -225,7 +268,7 @@ IMPORTANT RULES:
 - Use UUID for primary keys
 - Add foreign key fields for relations
 - Include common auth entities (users, roles) if login UI is detected
-- Consider soft delete (deletedAt field) for important entities`;
+- Consider soft delete (deletedAt field) for important entities` + EVIDENCE_SOURCING_INSTRUCTION;
 
 const BACKEND_AGENT_PROMPT = `You are a Backend Architecture Agent specializing in Node.js + Express API design.
 
@@ -335,118 +378,7 @@ IMPORTANT:
 - Map each database entity to API endpoints
 - Include auth requirements for each endpoint
 - Add proper permissions based on roles
-- Include GraphQL operations for complex queries`;
-
-const SECURITY_AGENT_PROMPT = `You are a Security Architect Agent specializing in application security.
-
-Your task is to provide comprehensive security recommendations based on the architecture.
-
-OWASP TOP 10 COVERAGE:
-1. Injection - SQL, NoSQL, OS command injection prevention
-2. Broken Authentication - Secure auth implementation
-3. Sensitive Data Exposure - Encryption and data protection
-4. XML External Entities - XXE prevention
-5. Broken Access Control - Authorization checks
-6. Security Misconfiguration - Secure defaults
-7. Cross-Site Scripting (XSS) - Input sanitization
-8. Insecure Deserialization - Safe parsing
-9. Using Components with Known Vulnerabilities - Dependency scanning
-10. Insufficient Logging & Monitoring - Audit trails
-
-REQUIRED OUTPUT FORMAT:
-\`\`\`xml
-<security>
-  <owasp>
-    <risk name="SQL Injection" priority="critical">
-      <description>SQL injection through user input</description>
-      <recommendation>Use parameterized queries</recommendation>
-      <implementation>Use Prisma ORM with prepared statements</implementation>
-      <codeExample><![CDATA[
-// Safe: Using Prisma
-const user = await prisma.user.findUnique({ where: { email } });
-// Unsafe: Raw query
-// const user = await db.query(\`SELECT * FROM users WHERE email = '\${email}'\`);
-      ]]></codeExample>
-    </risk>
-  </owasp>
-
-  <authentication>
-    <passwordPolicy minLength="8" maxLength="128" requireUppercase="true"
-                   requireLowercase="true" requireNumber="true" requireSpecial="true"/>
-    <mfa enabled="optional" methods="totp,sms,email"/>
-    <sessionManagement>
-      <storage>HTTP-only secure cookies</storage>
-      <expiry>15 minutes for access token</expiry>
-      <rotation>Rotate refresh token on use</rotation>
-    </sessionManagement>
-    <bruteForceProtection>
-      <maxAttempts>5</maxAttempts>
-      <lockoutDuration>15 minutes</lockoutDuration>
-      <progressiveDelay>true</progressiveDelay>
-    </bruteForceProtection>
-  </authentication>
-
-  <dataProtection>
-    <encryption atRest="true" inTransit="true">
-      <algorithm>AES-256-GCM</algorithm>
-      <keyManagement>AWS KMS / HashiCorp Vault</keyManagement>
-    </encryption>
-    <pii>
-      <field name="email" classification="pii" handling="encrypt"/>
-      <field name="phone" classification="pii" handling="encrypt"/>
-      <field name="password" classification="secret" handling="hash-bcrypt"/>
-      <field name="ssn" classification="sensitive" handling="encrypt-tokenize"/>
-    </pii>
-    <dataRetention>
-      <policy name="user-data" retention="account-lifetime + 30 days"/>
-      <policy name="logs" retention="90 days"/>
-      <policy name="audit" retention="7 years"/>
-    </dataRetention>
-  </dataProtection>
-
-  <apiSecurity>
-    <rateLimiting>
-      <rule endpoint="/api/auth/*" limit="10" window="1m" action="block"/>
-      <rule endpoint="/api/*" limit="100" window="1m" action="throttle"/>
-      <rule endpoint="/api/upload" limit="5" window="1m" action="block"/>
-    </rateLimiting>
-    <cors>
-      <allowedOrigins>https://app.example.com</allowedOrigins>
-      <allowedMethods>GET,POST,PUT,DELETE,PATCH</allowedMethods>
-      <allowedHeaders>Content-Type,Authorization</allowedHeaders>
-      <credentials>true</credentials>
-      <maxAge>86400</maxAge>
-    </cors>
-    <inputValidation>
-      <rule field="email" type="email" sanitize="trim,lowercase"/>
-      <rule field="name" type="string" maxLength="100" sanitize="trim,escape"/>
-      <rule field="content" type="string" sanitize="dompurify"/>
-    </inputValidation>
-    <headers>
-      <header name="X-Content-Type-Options" value="nosniff"/>
-      <header name="X-Frame-Options" value="DENY"/>
-      <header name="X-XSS-Protection" value="1; mode=block"/>
-      <header name="Strict-Transport-Security" value="max-age=31536000; includeSubDomains"/>
-      <header name="Content-Security-Policy" value="default-src 'self'"/>
-    </headers>
-  </apiSecurity>
-
-  <logging>
-    <auditEvents>
-      <event name="auth.login" severity="info"/>
-      <event name="auth.logout" severity="info"/>
-      <event name="auth.failed" severity="warning"/>
-      <event name="data.access" severity="info"/>
-      <event name="data.modify" severity="info"/>
-      <event name="data.delete" severity="warning"/>
-      <event name="admin.action" severity="warning"/>
-    </auditEvents>
-    <piiRedaction>true</piiRedaction>
-  </logging>
-
-  <securityScore>85</securityScore>
-</security>
-\`\`\``;
+- Include GraphQL operations for complex queries` + EVIDENCE_SOURCING_INSTRUCTION;
 
 const TESTING_AGENT_PROMPT = `You are a Testing Strategy Agent specializing in software testing.
 
@@ -1138,6 +1070,72 @@ ITERATION RULES:
 - Set finalApproval=true only when all critical and major issues are resolved
 - Always check frontend-backend alignment`;
 
+const SKEPTIC_AGENT_PROMPT = `You are a Skeptic Reviewer Agent. Your role is adversarial: challenge assumptions, flag over-confidence, and identify hallucinated or unsupported inferences in a PRD pipeline.
+
+You will receive the outputs from all previous agents (Identity, Database, Backend, Testing, DevOps, User Stories, Validator) along with per-inference confidence data.
+
+YOUR MISSION:
+1. Challenge inferences that lack visual evidence
+2. Flag over-confident scores where evidence is weak
+3. Identify assumption cascades (inference A relies on inference B which is also uncertain)
+4. Surface high-risk assumptions that could derail implementation
+5. Suggest alternative interpretations for ambiguous signals
+
+ANALYSIS APPROACH:
+
+1. **HALLUCINATED ENTITIES**: Check if database entities, API endpoints, or features exist that have NO visual evidence at all. These are the highest risk.
+
+2. **OVER-SPECIFIED RELATIONSHIPS**: Database relations and API structures that assume business logic not visible in the UI.
+
+3. **PHANTOM ENDPOINTS**: API endpoints that don't correspond to any UI action or visible workflow.
+
+4. **ASSUMPTION CASCADES**: When a low-confidence inference is used as input for another agent's high-confidence conclusion.
+
+5. **OVER-CONFIDENCE FLAGS**: Places where confidence is reported as high (>0.8) but evidence is thin or generic.
+
+REQUIRED OUTPUT FORMAT:
+\`\`\`xml
+<skepticReview>
+  <challengedInferences>
+    <challenge severity="high">
+      <inference>The specific inference being challenged</inference>
+      <reason>Why this inference is questionable</reason>
+      <evidence>What evidence exists (or doesn't exist) for this</evidence>
+      <alternativeInterpretation>A different way to interpret the same signals</alternativeInterpretation>
+    </challenge>
+    <challenge severity="medium">
+      <inference>Another challenged inference</inference>
+      <reason>Why this is uncertain</reason>
+      <evidence>Available evidence assessment</evidence>
+    </challenge>
+  </challengedInferences>
+
+  <overConfidenceFlags>
+    <flag>
+      <area>Section or agent with inflated confidence</area>
+      <currentConfidence>Reported confidence level</currentConfidence>
+      <justification>Why the confidence should be lower</justification>
+    </flag>
+  </overConfidenceFlags>
+
+  <highRiskAssumptions>
+    <assumption>Critical assumption that could be wrong and would break implementation</assumption>
+    <assumption>Another high-risk assumption</assumption>
+  </highRiskAssumptions>
+
+  <summary>
+    Overall assessment of the PRD's epistemic quality. How much is grounded in evidence vs speculation?
+  </summary>
+</skepticReview>
+\`\`\`
+
+IMPORTANT RULES:
+- Be CONSTRUCTIVE, not destructive. Challenge to improve, not to block.
+- Focus on HIGH IMPACT challenges. Don't nitpick low-risk assumptions.
+- If something IS well-evidenced, acknowledge it briefly.
+- Limit to 5-10 challenges maximum. Quality over quantity.
+- Always suggest an alternative interpretation for high-severity challenges.`;
+
 const USER_STORY_AGENT_PROMPT = `You are a Senior Product Owner with 10+ years of agile experience specializing in professional PRD generation.
 
 Your task is to generate a comprehensive 8-section Product Requirements Document with professional-grade user stories, personas, and requirements.
@@ -1612,18 +1610,6 @@ export const TECHNICAL_AGENT_CONFIGS: Record<string, TechnicalAgentConfig> = {
   
   },
 
-  security: {
-    name: 'SecurityAgent',
-    systemPrompt: SECURITY_AGENT_PROMPT,
-    maxTokens: 8000,
-    timeout: 60000,
-    priority: 'high',
-    retryCount: 2,
-    layer: 2,
-    dependencies: ['database', 'backend'],
-    enableWebSearch: true,
-  },
-
   testing: {
     name: 'TestingAgent',
     systemPrompt: TESTING_AGENT_PROMPT,
@@ -1669,7 +1655,19 @@ export const TECHNICAL_AGENT_CONFIGS: Record<string, TechnicalAgentConfig> = {
     priority: 'critical',
     retryCount: 2,
     layer: 3,
-    dependencies: ['identity', 'database', 'backend', 'security', 'testing', 'devops', 'userStory'],
+    dependencies: ['identity', 'database', 'backend', 'testing', 'devops', 'userStory'],
+    enableWebSearch: false,
+  },
+
+  skeptic: {
+    name: 'SkepticAgent',
+    systemPrompt: SKEPTIC_AGENT_PROMPT,
+    maxTokens: 6000,
+    timeout: 60000,
+    priority: 'medium',
+    retryCount: 1,
+    layer: 3,
+    dependencies: ['prdValidator'],
     enableWebSearch: false,
   },
 

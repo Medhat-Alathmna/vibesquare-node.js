@@ -198,10 +198,17 @@ Output valid XML with root <userStories> element containing all 8 sections.`;
       const role = this.extractText(personaXml, 'role') || 'User';
 
       const demographicsMatch = personaXml.match(/<demographics>([\s\S]*?)<\/demographics>/);
+      const technicalExpertiseRaw = this.extractText(demographicsMatch?.[1], 'technicalExpertise')?.toLowerCase().trim();
+      const validExpertiseLevels = ['novice', 'intermediate', 'expert'] as const;
+      const technicalExpertise: 'novice' | 'intermediate' | 'expert' =
+        validExpertiseLevels.includes(technicalExpertiseRaw as typeof validExpertiseLevels[number])
+          ? (technicalExpertiseRaw as 'novice' | 'intermediate' | 'expert')
+          : 'intermediate';
+
       const demographics = {
         age: this.extractText(demographicsMatch?.[1], 'age'),
         location: this.extractText(demographicsMatch?.[1], 'location'),
-        technicalExpertise: (this.extractText(demographicsMatch?.[1], 'technicalExpertise') as 'novice' | 'intermediate' | 'expert') || 'intermediate',
+        technicalExpertise,
       };
 
       const needs = this.extractListItems(personaXml, 'need') || [];

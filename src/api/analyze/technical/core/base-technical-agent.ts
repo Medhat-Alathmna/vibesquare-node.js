@@ -18,6 +18,7 @@ import {
   DEFAULT_AGENT_MODEL_CONFIGS,
   ModelFallbackResult,
   AgentModelConfig,
+  InferenceConfidence,
 } from './technical-agent.types';
 
 // ============ Base Technical Agent Abstract Class ============
@@ -95,6 +96,60 @@ export abstract class BaseTechnicalAgent<TOutput> {
   protected abstract parseXMLOutput(xmlContent: string): TOutput;
 
   /**
+   * Extract per-inference confidence data from parsed output.
+   * Override in subclasses to provide agent-specific inference extraction.
+   * Default returns empty array.
+   */
+  protected extractInferences(_data: TOutput, _xmlContent: string): InferenceConfidence[] {
+    return [];
+  }
+
+  /**
+   * Parse <inferences> block from LLM XML output.
+   * Returns a map of inference description → { confidence, evidence[], alternatives[] }
+   */
+  protected parseEvidenceFromXML(xmlContent: string): Map<string, {
+    confidence: number;
+    evidence: string[];
+    alternatives: string[];
+  }> {
+    const result = new Map<string, { confidence: number; evidence: string[]; alternatives: string[] }>();
+
+    // Match all <inferenceItem> blocks
+    const itemRegex = /<inferenceItem\s+confidence="([^"]+)">\s*<what>([\s\S]*?)<\/what>\s*<evidence>([\s\S]*?)<\/evidence>(?:\s*<alternatives>([\s\S]*?)<\/alternatives>)?/g;
+    let match;
+
+    while ((match = itemRegex.exec(xmlContent)) !== null) {
+      const confidence = parseFloat(match[1]) || 0.5;
+      const what = match[2].trim();
+      const evidenceBlock = match[3];
+      const alternativesBlock = match[4] || '';
+
+      // Extract individual signals
+      const signals: string[] = [];
+      const signalRegex = /<signal>([\s\S]*?)<\/signal>/g;
+      let signalMatch;
+      while ((signalMatch = signalRegex.exec(evidenceBlock)) !== null) {
+        const signal = signalMatch[1].trim();
+        if (signal) signals.push(signal);
+      }
+
+      // Extract alternatives
+      const alts: string[] = [];
+      const altRegex = /<alt>([\s\S]*?)<\/alt>/g;
+      let altMatch;
+      while ((altMatch = altRegex.exec(alternativesBlock)) !== null) {
+        const alt = altMatch[1].trim();
+        if (alt) alts.push(alt);
+      }
+
+      result.set(what.toLowerCase(), { confidence, evidence: signals, alternatives: alts });
+    }
+
+    return result;
+  }
+
+  /**
    * Get detail level specific instructions
    */
   protected getDetailLevelInstructions(level: DetailLevel): string {
@@ -140,6 +195,7 @@ DETAIL LEVEL: COMPREHENSIVE
     tokenUsage: number;
     modelUsed: ModelTier;
     estimatedCost: number;
+    inferences: InferenceConfidence[];
   }> {
     const startTime = Date.now();
 
@@ -185,6 +241,9 @@ DETAIL LEVEL: COMPREHENSIVE
       // Validate if schema provided
       const validated = this.validateOutput(parsed);
 
+      // Extract per-inference confidence data
+      const inferences = this.extractInferences(validated, xmlContent);
+
       const processingTimeMs = Date.now() - startTime;
       const estimatedCost = (result.tokenUsage.total / 1_000_000) * modelConfig.costPerMToken;
 
@@ -195,6 +254,7 @@ DETAIL LEVEL: COMPREHENSIVE
         tokenUsage: result.tokenUsage.total,
         modelUsed: tier,
         estimatedCost,
+        inferences,
       };
     } catch (error: unknown) {
       const processingTimeMs = Date.now() - startTime;
@@ -295,6 +355,7 @@ DETAIL LEVEL: COMPREHENSIVE
     tokenUsage: number;
     modelUsed?: ModelTier;
     estimatedCost?: number;
+    inferences: InferenceConfidence[];
     fallbackResult?: ModelFallbackResult;
   }> {
     const enableFallback = options?.enableModelFallback ?? true;

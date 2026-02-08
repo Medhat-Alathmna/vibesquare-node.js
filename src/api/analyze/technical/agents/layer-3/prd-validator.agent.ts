@@ -50,17 +50,12 @@ ${previousOutputs?.databaseSchema?.substring(0, 2000) || 'NOT PROVIDED'}${(previ
 ${previousOutputs?.backendArchitecture?.substring(0, 2000) || 'NOT PROVIDED'}${(previousOutputs?.backendArchitecture?.length || 0) > 2000 ? '...' : ''}
 \`\`\`
 
-## 5. Security Recommendations
-\`\`\`xml
-${previousOutputs?.securityRecommendations?.substring(0, 1500) || 'NOT PROVIDED'}${(previousOutputs?.securityRecommendations?.length || 0) > 1500 ? '...' : ''}
-\`\`\`
-
-## 6. Testing Strategy
+## 5. Testing Strategy
 \`\`\`xml
 ${previousOutputs?.testingStrategy?.substring(0, 1500) || 'NOT PROVIDED'}${(previousOutputs?.testingStrategy?.length || 0) > 1500 ? '...' : ''}
 \`\`\`
 
-## 7. DevOps Configuration
+## 6. DevOps Configuration
 \`\`\`xml
 ${previousOutputs?.devopsConfig?.substring(0, 1500) || 'NOT PROVIDED'}${(previousOutputs?.devopsConfig?.length || 0) > 1500 ? '...' : ''}
 \`\`\`

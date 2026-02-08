@@ -34,11 +34,11 @@ import { TechnicalAgentExecutionError } from '../core/base-technical-agent';
 import { identityAgent } from '../agents/layer-0/identity.agent';
 import { databaseAgent } from '../agents/layer-1/database.agent';
 import { backendAgent } from '../agents/layer-2/backend.agent';
-import { securityAgent } from '../agents/layer-2/security.agent';
 import { testingAgent } from '../agents/layer-2/testing.agent';
 import { devopsAgent } from '../agents/layer-2/devops.agent';
 import { userStoryAgent } from '../agents/layer-2/user-story.agent';
 import { prdValidatorAgent } from '../agents/layer-3/prd-validator.agent';
+import { skepticAgent } from '../agents/layer-3/skeptic.agent';
 import { qaAgent } from '../agents/layer-3/qa.agent';
 
 // ============ Node Functions ============
@@ -77,6 +77,7 @@ async function identityAgentNode(state: TechnicalGraphStateType): Promise<Partia
       identityConfidence: result.data.confidence,
       agentStatus: { identity: 'completed' },
       tokenUsage: result.tokenUsage,
+      allInferences: result.inferences,
       ...confidenceUpdate,
     };
   } catch (error) {
@@ -116,6 +117,7 @@ async function databaseAgentNode(state: TechnicalGraphStateType): Promise<Partia
       databaseSchema: result.xml,
       agentStatus: { database: 'completed' },
       tokenUsage: result.tokenUsage,
+      allInferences: result.inferences,
     };
   } catch (error) {
     const agentError = createTechnicalAgentError(
@@ -155,6 +157,7 @@ async function backendAgentNode(state: TechnicalGraphStateType): Promise<Partial
       backendArchitecture: result.xml,
       agentStatus: { backend: 'completed' },
       tokenUsage: result.tokenUsage,
+      allInferences: result.inferences,
     };
   } catch (error) {
     const agentError = createTechnicalAgentError(
@@ -168,46 +171,6 @@ async function backendAgentNode(state: TechnicalGraphStateType): Promise<Partial
     return {
       errors: [agentError],
       agentStatus: { backend: 'failed' },
-    };
-  }
-}
-
-/**
- * Security Agent Node (Layer 2)
- */
-async function securityAgentNode(state: TechnicalGraphStateType): Promise<Partial<TechnicalGraphStateType>> {
-  console.log('[Technical Pipeline] Running Security Agent...');
-
-  try {
-    const input: TechnicalAgentInput = {
-      visualResults: state.visualResults,
-      detailLevel: state.detailLevel,
-      apiStyle: state.apiStyle,
-      previousOutputs: {
-        databaseSchema: state.databaseSchema,
-        backendArchitecture: state.backendArchitecture,
-      },
-    };
-
-    const result = await securityAgent.executeWithRetry(input);
-
-    return {
-      securityRecommendations: result.xml,
-      agentStatus: { security: 'completed' },
-      tokenUsage: result.tokenUsage,
-    };
-  } catch (error) {
-    const agentError = createTechnicalAgentError(
-      'security',
-      error instanceof Error ? error : new Error('Unknown error'),
-      false
-    );
-
-    console.warn('[Technical Pipeline] Security Agent failed, skipping:', error);
-
-    return {
-      errors: [agentError],
-      agentStatus: { security: 'failed' },
     };
   }
 }
@@ -235,6 +198,7 @@ async function testingAgentNode(state: TechnicalGraphStateType): Promise<Partial
       testingStrategy: result.xml,
       agentStatus: { testing: 'completed' },
       tokenUsage: result.tokenUsage,
+      allInferences: result.inferences,
     };
   } catch (error) {
     const agentError = createTechnicalAgentError(
@@ -274,6 +238,7 @@ async function devopsAgentNode(state: TechnicalGraphStateType): Promise<Partial<
       devopsConfig: result.xml,
       agentStatus: { devops: 'completed' },
       tokenUsage: result.tokenUsage,
+      allInferences: result.inferences,
     };
   } catch (error) {
     const agentError = createTechnicalAgentError(
@@ -315,6 +280,7 @@ async function userStoryAgentNode(state: TechnicalGraphStateType): Promise<Parti
       userStories: result.xml,
       agentStatus: { userStory: 'completed' },
       tokenUsage: result.tokenUsage,
+      allInferences: result.inferences,
     };
   } catch (error) {
     const agentError = createTechnicalAgentError(
@@ -347,7 +313,6 @@ async function prdValidatorNode(state: TechnicalGraphStateType): Promise<Partial
         identity: state.identity,
         databaseSchema: state.databaseSchema,
         backendArchitecture: state.backendArchitecture,
-        securityRecommendations: state.securityRecommendations,
         testingStrategy: state.testingStrategy,
         devopsConfig: state.devopsConfig,
         userStories: state.userStories,
@@ -378,6 +343,54 @@ async function prdValidatorNode(state: TechnicalGraphStateType): Promise<Partial
 }
 
 /**
+ * Skeptic Agent Node (Layer 3)
+ * Non-critical: failure is gracefully handled and pipeline continues to QA.
+ */
+async function skepticAgentNode(state: TechnicalGraphStateType): Promise<Partial<TechnicalGraphStateType>> {
+  console.log('[Technical Pipeline] Running Skeptic Agent...');
+
+  try {
+    const input: TechnicalAgentInput = {
+      visualResults: state.visualResults,
+      detailLevel: state.detailLevel,
+      apiStyle: state.apiStyle,
+      productIdentity: state.identity, // Pass parsed identity object
+      previousOutputs: {
+        databaseSchema: state.databaseSchema,
+        backendArchitecture: state.backendArchitecture,
+        userStories: state.userStories,
+        validationResult: state.validationResult,
+      },
+    };
+
+    const result = await skepticAgent.executeWithRetry(input);
+
+    console.log(`[Technical Pipeline] Skeptic Agent completed: ${result.data.challengedInferences.length} challenges, ${result.data.highRiskAssumptions.length} high-risk assumptions`);
+
+    return {
+      skepticReview: result.xml,
+      agentStatus: { skeptic: 'completed' },
+      tokenUsage: result.tokenUsage,
+      allInferences: result.inferences,
+    };
+  } catch (error) {
+    // Skeptic is non-critical — log and continue
+    console.warn('[Technical Pipeline] Skeptic Agent failed (non-critical), continuing:', error);
+
+    const agentError = createTechnicalAgentError(
+      'skeptic',
+      error instanceof Error ? error : new Error('Unknown error'),
+      false // Non-critical
+    );
+
+    return {
+      errors: [agentError],
+      agentStatus: { skeptic: 'failed' },
+    };
+  }
+}
+
+/**
  * QA Agent Node (Layer 3)
  */
 async function qaAgentNode(state: TechnicalGraphStateType): Promise<Partial<TechnicalGraphStateType>> {
@@ -392,11 +405,11 @@ async function qaAgentNode(state: TechnicalGraphStateType): Promise<Partial<Tech
       previousOutputs: {
         databaseSchema: state.databaseSchema,
         backendArchitecture: state.backendArchitecture,
-        securityRecommendations: state.securityRecommendations,
         testingStrategy: state.testingStrategy,
         devopsConfig: state.devopsConfig,
         userStories: state.userStories,
         validationResult: state.validationResult,
+        skepticReview: state.skepticReview,
       },
     };
 
@@ -470,12 +483,12 @@ function afterLayer2(state: TechnicalGraphStateType): 'validator' | 'end' {
 /**
  * Check after validator
  */
-function afterValidator(state: TechnicalGraphStateType): 'qa' | 'end' {
+function afterValidator(state: TechnicalGraphStateType): 'skeptic' | 'end' {
   if (state.agentStatus.prdValidator === 'failed') {
     console.log('[Technical Pipeline] Validator failed, ending pipeline');
     return 'end';
   }
-  return 'qa';
+  return 'skeptic';
 }
 
 /**
@@ -523,13 +536,13 @@ export function createTechnicalGraph() {
 
     // Layer 2: Parallel agents
     .addNode('backend_agent', backendAgentNode)
-    .addNode('security_agent', securityAgentNode)
     .addNode('testing_agent', testingAgentNode)
     .addNode('devops_agent', devopsAgentNode)
     .addNode('user_story_agent', userStoryAgentNode)
 
     // Layer 3: Sequential validation
     .addNode('prd_validator', prdValidatorNode)
+    .addNode('skeptic_agent', skepticAgentNode)
     .addNode('qa_agent', qaAgentNode)
 
     // Edges: Start with identity (Layer 0)
@@ -548,23 +561,24 @@ export function createTechnicalGraph() {
     })
 
     // Layer 2 runs in parallel after database
-    .addEdge('database_agent', 'security_agent')
     .addEdge('database_agent', 'testing_agent')
     .addEdge('database_agent', 'devops_agent')
     .addEdge('database_agent', 'user_story_agent')
 
     // All layer 2 converge to validator
     .addEdge('backend_agent', 'prd_validator')
-    .addEdge('security_agent', 'prd_validator')
     .addEdge('testing_agent', 'prd_validator')
     .addEdge('devops_agent', 'prd_validator')
     .addEdge('user_story_agent', 'prd_validator')
 
-    // Validator to QA
+    // Validator to Skeptic
     .addConditionalEdges('prd_validator', afterValidator, {
-      qa: 'qa_agent',
+      skeptic: 'skeptic_agent',
       end: END,
     })
+
+    // Skeptic to QA
+    .addEdge('skeptic_agent', 'qa_agent')
 
     // QA conditional: loop back to validator or end
     .addConditionalEdges('qa_agent', qaDecision, {
@@ -667,17 +681,16 @@ export async function executeTechnicalPipeline(
       identityConfidence: finalState.identityConfidence,
       databaseSchema: finalState.databaseSchema || '',
       backendArchitecture: finalState.backendArchitecture || '',
-      securityRecommendations: finalState.securityRecommendations || '',
       testingStrategy: finalState.testingStrategy || '',
       devopsConfig: finalState.devopsConfig || '',
       userStories: finalState.userStories || '',
       validationResult: finalState.validationResult || '',
+      skepticReview: finalState.skepticReview || undefined,
       qaReview: finalState.qaReview || '',
       summaries: {
         identity: finalState.identity,
         database: { xml: finalState.databaseSchema || '', entities: [], relations: [], enums: [] },
         backend: { xml: finalState.backendArchitecture || '', endpoints: [], techStack: { framework: 'Express', runtime: 'Node.js', apiStyle: 'REST' } },
-        security: { xml: finalState.securityRecommendations || '', owaspCoverage: [], securityScore: 0 },
         testing: { xml: finalState.testingStrategy || '', testSuites: [], coverageTarget: 80 },
         devops: { xml: finalState.devopsConfig || '', services: [], hostingRecommendations: [] },
         userStory: {
@@ -710,6 +723,7 @@ export async function executeTechnicalPipeline(
         agentScores,
         lowConfidenceAreas: confidenceSummary.lowConfidenceAreas,
         clarificationNeeded: finalState.confidenceState.needsClarification,
+        inferences: finalState.allInferences,
       },
       metadata: {
         processingTimeMs,

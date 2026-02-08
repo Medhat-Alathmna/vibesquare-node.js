@@ -15,6 +15,7 @@ import {
   TechnicalAgentInput,
   BackendAgentOutput,
   BackendAgentOutputSchema,
+  InferenceConfidence,
 } from '../../core/technical-agent.types';
 import { TECHNICAL_AGENT_CONFIGS } from '../../core/technical-agent-config';
 
@@ -157,6 +158,60 @@ Output complete XML following the format in the system prompt.`;
         apiStyle,
       },
     };
+  }
+
+  /**
+   * Extract per-inference confidence from backend architecture.
+   * Creates inferences for each endpoint and tech stack choice.
+   */
+  protected extractInferences(data: BackendAgentOutput, xmlContent: string): InferenceConfidence[] {
+    const inferences: InferenceConfidence[] = [];
+
+    // Parse LLM-provided evidence from XML
+    const evidenceMap = this.parseEvidenceFromXML(xmlContent);
+
+    const findEvidence = (keyword: string) => {
+      const lower = keyword.toLowerCase();
+      for (const [key, val] of evidenceMap) {
+        if (key.includes(lower) || lower.includes(key)) return val;
+      }
+      return undefined;
+    };
+
+    // Standard CRUD endpoints are high confidence, custom ones are lower
+    const crudMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+
+    for (const ep of data.endpoints) {
+      const isCrud = crudMethods.includes(ep.method.toUpperCase());
+      const isStandardPath = /^\/api\/v\d+\/\w+/.test(ep.path);
+      const llmEvidence = findEvidence(ep.path);
+      const defaultConf = isCrud && isStandardPath ? 0.8 : 0.55;
+      const conf = llmEvidence ? llmEvidence.confidence : defaultConf;
+
+      inferences.push({
+        inference: `API endpoint: ${ep.method} ${ep.path}${ep.auth ? ' (auth required)' : ''}`,
+        confidence: parseFloat(conf.toFixed(2)),
+        level: conf >= 0.8 ? 'high' : conf >= 0.5 ? 'medium' : 'low',
+        evidence: llmEvidence?.evidence || [],
+        alternatives: llmEvidence?.alternatives || [],
+        humanReviewNeeded: !llmEvidence && conf < 0.6,
+        source: 'BackendAgent',
+      });
+    }
+
+    // Tech stack inference
+    const techEvidence = findEvidence('tech stack') || findEvidence('framework');
+    inferences.push({
+      inference: `Tech stack: ${data.techStack.framework} on ${data.techStack.runtime} (${data.techStack.apiStyle})`,
+      confidence: techEvidence ? parseFloat(techEvidence.confidence.toFixed(2)) : 0.7,
+      level: 'medium',
+      evidence: techEvidence?.evidence || [],
+      alternatives: techEvidence?.alternatives || ['Express + Node.js', 'Fastify + Node.js', 'NestJS + Node.js'],
+      humanReviewNeeded: true,
+      source: 'BackendAgent',
+    });
+
+    return inferences;
   }
 }
 
