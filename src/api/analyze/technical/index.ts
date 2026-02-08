@@ -25,6 +25,8 @@ import {
   DetailLevel,
   PipelineType,
   TechnicalPipelineResult,
+  ClarificationQuestion,
+  ClarificationResponse,
 } from './core/technical-agent.types';
 
 /**
@@ -36,6 +38,10 @@ export interface TechnicalPipelineOptions {
   apiStyle?: 'REST' | 'GraphQL';
   pipelineType?: PipelineType;
   enableWebSearch?: boolean;
+  clarifications?: {
+    questions: ClarificationQuestion[];
+    responses: ClarificationResponse[];
+  };
 }
 
 /**
@@ -47,10 +53,12 @@ export interface TechnicalPipelineOptions {
 export async function executeTechnicalPipeline(
   options: TechnicalPipelineOptions
 ): Promise<TechnicalPipelineResult> {
-  const { visualResults, detailLevel = 'detailed', apiStyle } = options;
+  const { visualResults, detailLevel = 'detailed', apiStyle, clarifications } = options;
 
   // Execute the technical pipeline
-  const result = await executeRawTechnicalPipeline(visualResults, detailLevel, apiStyle);
+  const result = await executeRawTechnicalPipeline(
+    visualResults, detailLevel, apiStyle, clarifications
+  );
 
   // Synthesize the final PRD
   result.prdMarkdown = synthesizePRD(result, visualResults, detailLevel);

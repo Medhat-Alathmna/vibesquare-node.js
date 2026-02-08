@@ -29,7 +29,7 @@ class DatabaseAgent extends BaseTechnicalAgent<DatabaseAgentOutput> {
    * Build user prompt from visual pipeline results
    */
   protected buildUserPrompt(input: TechnicalAgentInput): string {
-    const { visualResults } = input;
+    const { visualResults, clarificationsText } = input;
 
     // Extract relevant information from visual analysis
     const components = visualResults.componentIdentification?.components || [];
@@ -59,8 +59,13 @@ class DatabaseAgent extends BaseTechnicalAgent<DatabaseAgentOutput> {
       ['login', 'register', 'auth', 'signup', 'signin', 'profile', 'avatar'].includes(c.type.toLowerCase())
     );
 
-    return `Analyze this website's visual components and infer a comprehensive PostgreSQL database schema.
+    // Build clarifications section if available
+    const clarificationsSection = clarificationsText
+      ? `\n${clarificationsText}\n`
+      : '';
 
+    return `Analyze this website's visual components and infer a comprehensive PostgreSQL database schema.
+${clarificationsSection}
 ## Visual Analysis Results
 
 ### Page Layout
@@ -76,7 +81,7 @@ ${formComponents.length > 0 ? formComponents.map((c) => `- ${c.type} (${c.count}
 ${listComponents.length > 0 ? listComponents.map((c) => `- ${c.type} (${c.count})`).join('\n') : 'None detected'}
 
 ### Auth-Related Components
-${authComponents.length > 0 ? authComponents.map((c) => `- ${c.type}`).join('\n') : 'None detected - but include basic auth tables'}
+${authComponents.length > 0 ? authComponents.map((c) => `- ${c.type}`).join('\n') : 'None detected - do NOT include auth tables unless other strong signals suggest authentication is needed'}
 
 ### Visual Identity
 - Primary Color: ${(designInfo as any)?.colors?.primary || 'Not detected'}

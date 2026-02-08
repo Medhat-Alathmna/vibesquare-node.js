@@ -40,7 +40,7 @@ class UserStoryAgent extends BaseTechnicalAgent<EnhancedUserStoryAgentOutput> {
    * Build user prompt from visual analysis and architecture
    */
   protected buildUserPrompt(input: TechnicalAgentInput): string {
-    const { visualResults, previousOutputs } = input;
+    const { visualResults, previousOutputs, clarificationsText } = input;
     const databaseSchema = previousOutputs?.databaseSchema || '';
     const backendArchitecture = previousOutputs?.backendArchitecture || '';
 
@@ -48,8 +48,13 @@ class UserStoryAgent extends BaseTechnicalAgent<EnhancedUserStoryAgentOutput> {
     const components = visualResults.componentIdentification?.components || [];
     const layoutSections = visualResults.layoutAnalysis?.sections || [];
 
-    return `Generate a comprehensive 8-section Professional Product Requirements Document with detailed user stories, personas, and requirements.
+    // Build clarifications section if available
+    const clarificationsSection = clarificationsText
+      ? `\n${clarificationsText}\n`
+      : '';
 
+    return `Generate a comprehensive 8-section Professional Product Requirements Document with detailed user stories, personas, and requirements.
+${clarificationsSection}
 ## Visual Analysis Context
 
 ### UI Components Detected

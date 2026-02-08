@@ -1,6 +1,10 @@
 import { executePipeline, executePipelineV2, LLMModel, PipelineResult, UserTier, PipelineV2Result } from './pipeline';
 import { executeTechnicalPipeline } from './technical';
-import { PipelineType, DetailLevel, APIStyle, TechnicalPipelineResult, VisualPipelineResult } from './technical/core/technical-agent.types';
+import { generateClarificationQuestions } from './technical/orchestration/clarification-generator';
+import {
+  PipelineType, DetailLevel, APIStyle, TechnicalPipelineResult, VisualPipelineResult,
+  ClarificationQuestion, ClarificationResponse, PreflightResult,
+} from './technical/core/technical-agent.types';
 import { getPRDRepository, CreatePRDDTO, getVisualPipelineCacheRepository, VisualPipelineCacheData } from '../../shared/repositories';
 import { normalizeUrl } from '../../shared/utils/url-normalizer';
 import { pipelineQueueService } from './services/pipeline-queue.service';
@@ -18,6 +22,21 @@ export interface AnalyzeV2Options {
   forceRefresh?: boolean; // Force bypass cache and re-execute pipeline
 }
 
+export interface PreflightV25Options {
+  url: string;
+  tier?: UserTier;
+  forceRefresh?: boolean;
+}
+
+export interface PreflightV25Result {
+  preflight: PreflightResult;
+  metadata: {
+    sourceUrl: string;
+    processingTimeMs: number;
+    cached: boolean;
+  };
+}
+
 export interface AnalyzeV25Options {
   url: string;
   pipelineType?: PipelineType;
@@ -27,6 +46,11 @@ export interface AnalyzeV25Options {
   userId?: string;
   includeDebug?: boolean;
   forceRefresh?: boolean; // Force bypass cache and re-execute pipeline
+  clarificationResponses?: Array<{
+    questionId: string;
+    selectedValues: string[];
+    customAnswer?: string;
+  }>;
 }
 
 export interface AnalyzeV25Result {
@@ -153,6 +177,74 @@ export class AnalyzeService {
   }
 
   /**
+   * V2.5 Preflight: Run visual pipeline and return clarification questions
+   *
+   * This runs BEFORE the full technical pipeline to gather user preferences.
+   * No LLM-powered technical agents are run - only visual analysis + rule-based questions.
+   */
+  async preflightV25(options: PreflightV25Options): Promise<PreflightV25Result> {
+    const startTime = Date.now();
+    const { url, tier, forceRefresh = false } = options;
+
+    console.log(`[Preflight V2.5] Starting preflight for: ${url}`);
+
+    const normalizedUrl = normalizeUrl(url);
+    let visualResult: PipelineV2Result;
+    let fromCache = false;
+
+    // Step 1: Run or fetch cached visual pipeline
+    if (!forceRefresh) {
+      const cached = await this.getFromCache(normalizedUrl);
+      if (cached) {
+        visualResult = this.reconstructPipelineResult(cached);
+        fromCache = true;
+        this.incrementCacheHit(cached.id).catch((err) =>
+          console.error('[Preflight V2.5] Failed to increment cache hit:', err)
+        );
+        console.log(`[Preflight V2.5] Using cached visual result`);
+      } else {
+        console.log(`[Preflight V2.5] Cache MISS, running visual pipeline`);
+        visualResult = await pipelineQueueService.execute(normalizedUrl, async () => {
+          const pipelineResult = await executePipelineV2({ url, tier });
+          await this.saveToCache(normalizedUrl, url, pipelineResult);
+          return pipelineResult;
+        });
+      }
+    } else {
+      console.log(`[Preflight V2.5] Force refresh - running visual pipeline`);
+      visualResult = await pipelineQueueService.execute(normalizedUrl, async () => {
+        const pipelineResult = await executePipelineV2({ url, tier });
+        await this.saveToCache(normalizedUrl, url, pipelineResult);
+        return pipelineResult;
+      });
+    }
+
+    // Step 2: Convert to VisualPipelineResult format
+    const visualPipelineInput: VisualPipelineResult = {
+      finalPrompt: visualResult.finalPrompt,
+      metadata: visualResult.metadata,
+      layoutAnalysis: visualResult.debug?.agentOutputs?.layoutAnalysis?.data as any,
+      componentIdentification: visualResult.debug?.agentOutputs?.componentIdentification?.data as any,
+      designSystem: visualResult.debug?.agentOutputs?.designSystem?.data as any,
+    };
+
+    // Step 3: Generate clarification questions (rule-based, no LLM)
+    const preflight = generateClarificationQuestions(visualPipelineInput);
+
+    const processingTimeMs = Date.now() - startTime;
+    console.log(`[Preflight V2.5] Generated ${preflight.questions.length} questions in ${processingTimeMs}ms`);
+
+    return {
+      preflight,
+      metadata: {
+        sourceUrl: url,
+        processingTimeMs,
+        cached: fromCache,
+      },
+    };
+  }
+
+  /**
    * V2.5: Analyze a URL using Visual + Technical Architecture Pipeline
    *
    * Combines Visual Pipeline (V2) with Technical Architecture Pipeline:
@@ -185,6 +277,7 @@ export class AnalyzeService {
       userId,
       includeDebug = false,
       forceRefresh = false,
+      clarificationResponses,
     } = options;
 
     console.log(`[Pipeline V2.5] Starting analysis for: ${url}`);
@@ -284,10 +377,28 @@ export class AnalyzeService {
         hasDesignSystem: !!visualPipelineInput.designSystem,
       });
 
+      // Build clarifications if user provided responses
+      let clarifications: { questions: ClarificationQuestion[]; responses: ClarificationResponse[] } | undefined;
+      if (clarificationResponses && clarificationResponses.length > 0) {
+        // Re-generate questions to pair with responses
+        const preflight = generateClarificationQuestions(visualPipelineInput);
+        clarifications = {
+          questions: preflight.questions,
+          responses: clarificationResponses.map((r) => ({
+            questionId: r.questionId,
+            selectedValues: r.selectedValues,
+            customAnswer: r.customAnswer,
+            timestamp: new Date(),
+          })),
+        };
+        console.log(`[Pipeline V2.5] User provided ${clarificationResponses.length} clarification responses`);
+      }
+
       technicalResult = await executeTechnicalPipeline({
         visualResults: visualPipelineInput,
         detailLevel,
         apiStyle,
+        clarifications,
       });
       console.log(`[Pipeline V2.5] Technical Pipeline completed in ${technicalResult.metadata.processingTimeMs}ms`);
     }

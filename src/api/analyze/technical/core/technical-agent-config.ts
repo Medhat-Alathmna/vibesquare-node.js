@@ -267,8 +267,10 @@ IMPORTANT RULES:
 - Always include id, createdAt, updatedAt for each entity
 - Use UUID for primary keys
 - Add foreign key fields for relations
-- Include common auth entities (users, roles) if login UI is detected
-- Consider soft delete (deletedAt field) for important entities` + EVIDENCE_SOURCING_INSTRUCTION;
+- ONLY include auth entities (User, Role, Session) if login/register/auth UI components are explicitly detected in the visual analysis
+- If NO auth components are detected, do NOT add auth entities. Not every application needs authentication.
+- Consider soft delete (deletedAt field) for important entities
+- Do NOT invent entities that have no visual evidence. Only create entities for data that is clearly represented in the UI.` + EVIDENCE_SOURCING_INSTRUCTION;
 
 const BACKEND_AGENT_PROMPT = `You are a Backend Architecture Agent specializing in Node.js + Express API design.
 
@@ -276,10 +278,10 @@ Your task is to design a complete backend architecture based on the database sch
 
 ARCHITECTURE PRINCIPLES:
 1. RESTful API design with proper HTTP methods
-2. JWT-based authentication with access/refresh tokens
-3. Role-based access control (RBAC)
-4. GraphQL support for flexible queries
-5. Proper error handling and validation
+2. Proper error handling and validation
+3. ONLY include authentication if auth-related entities exist in the database schema (User, Account, Session, etc.)
+4. ONLY include GraphQL if the application has complex nested data queries or real-time features visible in the UI
+5. Do NOT add features that have no basis in the database schema or visual analysis
 
 ENDPOINT DESIGN:
 - GET /api/{resource} - List with pagination
@@ -289,7 +291,7 @@ ENDPOINT DESIGN:
 - PATCH /api/{resource}/:id - Partial update
 - DELETE /api/{resource}/:id - Delete (soft delete preferred)
 
-AUTH ENDPOINTS:
+AUTH ENDPOINTS (ONLY if auth entities exist in database schema):
 - POST /api/auth/register
 - POST /api/auth/login
 - POST /api/auth/refresh
@@ -308,6 +310,8 @@ REQUIRED OUTPUT FORMAT:
     <orm>Prisma</orm>
   </techStack>
 
+  <!-- ONLY include authentication section if User/Auth entities exist in database schema -->
+  <!-- If no auth entities exist, OMIT this entire section -->
   <authentication>
     <strategy>JWT</strategy>
     <accessTokenExpiry>15m</accessTokenExpiry>
@@ -316,7 +320,6 @@ REQUIRED OUTPUT FORMAT:
     <roles>
       <role name="admin" permissions="all"/>
       <role name="user" permissions="read:own,write:own,delete:own"/>
-      <role name="guest" permissions="read:public"/>
     </roles>
   </authentication>
 
@@ -340,6 +343,8 @@ REQUIRED OUTPUT FORMAT:
     </resource>
   </endpoints>
 
+  <!-- ONLY include GraphQL section if complex nested queries or real-time features are needed -->
+  <!-- If the app is simple CRUD, OMIT this entire section -->
   <graphql>
     <queries>
       <query name="resources" returns="[Resource]" description="List resources"/>
@@ -347,17 +352,11 @@ REQUIRED OUTPUT FORMAT:
     </queries>
     <mutations>
       <mutation name="createResource" args="input: ResourceInput!" returns="Resource"/>
-      <mutation name="updateResource" args="id: ID!, input: ResourceInput!" returns="Resource"/>
-      <mutation name="deleteResource" args="id: ID!" returns="Boolean"/>
     </mutations>
-    <subscriptions>
-      <subscription name="resourceCreated" returns="Resource"/>
-    </subscriptions>
   </graphql>
 
   <middleware>
-    <middleware name="auth" description="JWT verification"/>
-    <middleware name="rbac" description="Role-based access control"/>
+    <!-- Only include auth/rbac middleware if authentication entities exist -->
     <middleware name="validate" description="Request validation with Zod"/>
     <middleware name="rateLimiter" description="Rate limiting"/>
     <middleware name="errorHandler" description="Global error handler"/>
@@ -376,9 +375,10 @@ REQUIRED OUTPUT FORMAT:
 
 IMPORTANT:
 - Map each database entity to API endpoints
-- Include auth requirements for each endpoint
-- Add proper permissions based on roles
-- Include GraphQL operations for complex queries` + EVIDENCE_SOURCING_INSTRUCTION;
+- ONLY include authentication/authorization if auth entities (User, Role, Session) exist in the database schema
+- ONLY include GraphQL if the UI shows complex nested data or real-time features
+- Do NOT add features, endpoints, or middleware that have no basis in the database schema or visual analysis
+- If something is not detected, leave it out. Do NOT add it "as best practice"` + EVIDENCE_SOURCING_INSTRUCTION;
 
 const TESTING_AGENT_PROMPT = `You are a Testing Strategy Agent specializing in software testing.
 

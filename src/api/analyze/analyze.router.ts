@@ -51,6 +51,29 @@ router.post('/v2',
 );
 
 /**
+ * POST /api/analyze/v2.5/preflight
+ * V2.5 Preflight: Run visual pipeline and return clarification questions
+ *
+ * Returns select-option questions with recommended answers.
+ * No LLM-powered technical agents are run (fast, cheap).
+ * The frontend should present these to the user, then send responses
+ * back with the full /v2.5 request.
+ *
+ * @body {string} url - The URL to analyze (required)
+ * @body {string} tier - User tier (optional)
+ * @body {boolean} forceRefresh - Force bypass visual cache (optional)
+ *
+ * @returns {array} questions - Clarification questions with options
+ * @returns {object} visualSummary - Summary of what was detected
+ * @returns {object} metadata - Processing metadata
+ */
+router.post('/v2.5/preflight',
+  optionalAuth(),
+  validate(analyzeValidator.preflightV25),
+  analyzeController.preflightV25
+);
+
+/**
  * POST /api/analyze/v2.5
  * V2.5: Analyze a URL using Visual + Technical Architecture Pipeline
  *

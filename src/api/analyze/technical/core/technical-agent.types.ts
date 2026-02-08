@@ -161,6 +161,8 @@ export interface TechnicalAgentInput {
   };
   // Parsed identity for quick access (optional)
   productIdentity?: ProductIdentity;
+  // Pre-formatted user clarifications text (injected into downstream prompts)
+  clarificationsText?: string;
 }
 
 // ============ Agent Output Types (XML Strings) ============
@@ -1011,14 +1013,27 @@ export interface AgentConfidenceScore {
 }
 
 /**
- * Clarification question for low confidence scenarios
+ * A single selectable option for a clarification question
+ */
+export interface ClarificationOption {
+  value: string;              // Machine-readable value (e.g., "email_password")
+  label: string;              // Display text (e.g., "Email/Password")
+  description?: string;       // Extra context (e.g., "Traditional login with email and password")
+  isRecommended: boolean;     // Highlight as recommended choice
+  recommendationReason?: string; // Why recommended (e.g., "Login form detected in UI")
+}
+
+/**
+ * Clarification question with select options and recommendations
  */
 export interface ClarificationQuestion {
   id: string;
   question: string;
-  context: string;  // Why we're asking
-  agentName: string;
-  options?: string[];  // Pre-defined options if applicable
+  context: string;            // Why we're asking (shown to user)
+  agentName: string;          // Which part of the system needs this
+  options: ClarificationOption[]; // Selectable options
+  allowMultiple: boolean;     // Can select multiple options?
+  allowCustom: boolean;       // Can user type a custom answer?
   priority: 'critical' | 'important' | 'optional';
 }
 
@@ -1027,8 +1042,26 @@ export interface ClarificationQuestion {
  */
 export interface ClarificationResponse {
   questionId: string;
-  answer: string;
+  selectedValues: string[];   // Selected option values
+  customAnswer?: string;      // If user typed a custom answer
   timestamp: Date;
+}
+
+/**
+ * Preflight result returned before full pipeline execution
+ */
+export interface PreflightResult {
+  questions: ClarificationQuestion[];
+  visualSummary: {
+    componentsDetected: string[];
+    hasAuth: boolean;
+    hasEcommerce: boolean;
+    hasDashboard: boolean;
+    hasSocial: boolean;
+    hasContent: boolean;
+    layoutType: string;
+    sourceUrl: string;
+  };
 }
 
 /**

@@ -77,6 +77,22 @@ const PIPELINE_TYPES = ['visual', 'technical', 'both'] as const;
 const DETAIL_LEVELS = ['basic', 'detailed', 'comprehensive'] as const;
 
 /**
+ * V2.5 Preflight Validator
+ * Runs visual pipeline and returns clarification questions (no LLM technical analysis)
+ */
+export const preflightV25 = {
+  body: Joi.object({
+    url: Joi.string().uri({ scheme: ['http', 'https'] }).required()
+      .messages({
+        'string.uri': 'URL must be a valid HTTP or HTTPS URL',
+        'any.required': 'URL is required',
+      }),
+    tier: Joi.string().valid(...USER_TIERS).optional(),
+    forceRefresh: Joi.boolean().default(false),
+  }),
+};
+
+/**
  * V2.5 Analyze URL Validator (Visual + Technical Architecture Pipeline)
  *
  * Generates a comprehensive PRD including:
@@ -118,5 +134,12 @@ export const analyzeUrlV25 = {
       .messages({
         'boolean.base': 'forceRefresh must be a boolean',
       }),
+    clarificationResponses: Joi.array().items(
+      Joi.object({
+        questionId: Joi.string().required(),
+        selectedValues: Joi.array().items(Joi.string()).min(1).required(),
+        customAnswer: Joi.string().optional().allow(''),
+      })
+    ).optional(),
   }),
 };

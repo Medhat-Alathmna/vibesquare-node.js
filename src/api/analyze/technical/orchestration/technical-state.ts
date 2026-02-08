@@ -69,6 +69,11 @@ export const TechnicalGraphState = Annotation.Root({
     default: () => undefined,
   }),
 
+  identityXml: Annotation<string | undefined>({
+    reducer: (_, next) => next,
+    default: () => undefined,
+  }),
+
   identityConfidence: Annotation<number>({
     reducer: (_, next) => next,
     default: () => 0,
@@ -200,6 +205,12 @@ export const TechnicalGraphState = Annotation.Root({
     reducer: (current, next) => [...current, ...next],
     default: () => [],
   }),
+
+  // Pre-formatted clarifications text for agent prompts
+  clarificationsText: Annotation<string>({
+    reducer: (_, next) => next,
+    default: () => '',
+  }),
 });
 
 // Type export for state
@@ -214,7 +225,8 @@ export function createInitialTechnicalState(
   visualResults: VisualPipelineResult,
   detailLevel: DetailLevel,
   apiStyle?: APIStyle,
-  confidenceThreshold?: number
+  confidenceThreshold?: number,
+  clarificationsText?: string
 ): TechnicalGraphStateType {
   return {
     visualResults,
@@ -222,6 +234,7 @@ export function createInitialTechnicalState(
     apiStyle: apiStyle || 'REST',
     startTime: Date.now(),
     identity: undefined,
+    identityXml: undefined,
     identityConfidence: 0,
     databaseSchema: undefined,
     backendArchitecture: undefined,
@@ -259,6 +272,7 @@ export function createInitialTechnicalState(
     },
     awaitingClarification: false,
     userClarifications: [],
+    clarificationsText: clarificationsText || '',
   };
 }
 
@@ -428,6 +442,9 @@ export function updateAgentConfidence(
           question: q,
           context: confidence.lowConfidenceAreas[idx] || 'Needs clarification',
           agentName: name,
+          options: [],
+          allowMultiple: false,
+          allowCustom: true,
           priority: confidence.overallScore < 50 ? 'critical' : 'important',
         });
       });

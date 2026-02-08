@@ -28,7 +28,7 @@ class BackendAgent extends BaseTechnicalAgent<BackendAgentOutput> {
    * Build user prompt from database schema and visual results
    */
   protected buildUserPrompt(input: TechnicalAgentInput): string {
-    const { visualResults, previousOutputs } = input;
+    const { visualResults, previousOutputs, clarificationsText } = input;
     const databaseSchema = previousOutputs?.databaseSchema || '';
 
     // Extract entities from database schema for API mapping
@@ -49,8 +49,13 @@ class BackendAgent extends BaseTechnicalAgent<BackendAgentOutput> {
     const buttonCount = components.filter((c) => c.type.toLowerCase().includes('button')).length;
     const searchDetected = components.some((c) => c.type.toLowerCase().includes('search'));
 
-    return `Design a complete Node.js + Express backend API based on the database schema.
+    // Build clarifications section if available
+    const clarificationsSection = clarificationsText
+      ? `\n${clarificationsText}\n`
+      : '';
 
+    return `Design a complete Node.js + Express backend API based on the database schema.
+${clarificationsSection}
 ## Database Schema (from Database Agent)
 
 \`\`\`xml
@@ -68,7 +73,7 @@ ${entities.map((e) => `- ${e}`).join('\n') || 'No entities detected - create bas
 - Search: ${searchDetected ? 'Yes' : 'No'}
 
 ### Auth Required
-${hasAuth ? 'Yes - User/Auth entities detected. Include full auth flow.' : 'No auth entities detected - but include basic auth as best practice.'}
+${hasAuth ? 'Yes - User/Auth entities detected. Include full auth flow.' : 'No - No auth entities detected. Do NOT include auth endpoints unless the visual analysis strongly suggests authentication is needed.'}
 
 ### Visual Prompt Summary
 ${visualPrompt.substring(0, 1500)}${visualPrompt.length > 1500 ? '...' : ''}

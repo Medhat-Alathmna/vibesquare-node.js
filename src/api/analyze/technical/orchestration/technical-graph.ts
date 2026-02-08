@@ -27,7 +27,10 @@ import {
   APIStyle,
   TechnicalAgentInput,
   TechnicalPipelineResult,
+  ClarificationQuestion,
+  ClarificationResponse,
 } from '../core/technical-agent.types';
+import { formatClarificationsForPrompt } from './clarification-generator';
 import { TechnicalAgentExecutionError } from '../core/base-technical-agent';
 
 // Import agents
@@ -54,6 +57,7 @@ async function identityAgentNode(state: TechnicalGraphStateType): Promise<Partia
     const input: TechnicalAgentInput = {
       visualResults: state.visualResults,
       detailLevel: state.detailLevel,
+      clarificationsText: state.clarificationsText || undefined,
     };
 
     const result = await identityAgent.executeWithRetry(input);
@@ -74,6 +78,7 @@ async function identityAgentNode(state: TechnicalGraphStateType): Promise<Partia
 
     return {
       identity: result.data.identity,
+      identityXml: result.xml,
       identityConfidence: result.data.confidence,
       agentStatus: { identity: 'completed' },
       tokenUsage: result.tokenUsage,
@@ -106,9 +111,11 @@ async function databaseAgentNode(state: TechnicalGraphStateType): Promise<Partia
     const input: TechnicalAgentInput = {
       visualResults: state.visualResults,
       detailLevel: state.detailLevel,
+      productIdentity: state.identity,
       previousOutputs: {
-        identity: state.identity,
+        identity: state.identityXml,
       },
+      clarificationsText: state.clarificationsText || undefined,
     };
 
     const result = await databaseAgent.executeWithRetry(input);
@@ -149,6 +156,7 @@ async function backendAgentNode(state: TechnicalGraphStateType): Promise<Partial
       previousOutputs: {
         databaseSchema: state.databaseSchema,
       },
+      clarificationsText: state.clarificationsText || undefined,
     };
 
     const result = await backendAgent.executeWithRetry(input);
@@ -190,6 +198,7 @@ async function testingAgentNode(state: TechnicalGraphStateType): Promise<Partial
         databaseSchema: state.databaseSchema,
         backendArchitecture: state.backendArchitecture,
       },
+      clarificationsText: state.clarificationsText || undefined,
     };
 
     const result = await testingAgent.executeWithRetry(input);
@@ -230,6 +239,7 @@ async function devopsAgentNode(state: TechnicalGraphStateType): Promise<Partial<
       previousOutputs: {
         databaseSchema: state.databaseSchema,
       },
+      clarificationsText: state.clarificationsText || undefined,
     };
 
     const result = await devopsAgent.executeWithRetry(input);
@@ -267,11 +277,13 @@ async function userStoryAgentNode(state: TechnicalGraphStateType): Promise<Parti
       visualResults: state.visualResults,
       detailLevel: state.detailLevel,
       apiStyle: state.apiStyle,
+      productIdentity: state.identity,
       previousOutputs: {
-        identity: state.identity,
+        identity: state.identityXml,
         databaseSchema: state.databaseSchema,
         backendArchitecture: state.backendArchitecture,
       },
+      clarificationsText: state.clarificationsText || undefined,
     };
 
     const result = await userStoryAgent.executeWithRetry(input);
@@ -309,14 +321,16 @@ async function prdValidatorNode(state: TechnicalGraphStateType): Promise<Partial
       visualResults: state.visualResults,
       detailLevel: state.detailLevel,
       apiStyle: state.apiStyle,
+      productIdentity: state.identity,
       previousOutputs: {
-        identity: state.identity,
+        identity: state.identityXml,
         databaseSchema: state.databaseSchema,
         backendArchitecture: state.backendArchitecture,
         testingStrategy: state.testingStrategy,
         devopsConfig: state.devopsConfig,
         userStories: state.userStories,
       },
+      clarificationsText: state.clarificationsText || undefined,
     };
 
     const result = await prdValidatorAgent.executeWithRetry(input);
@@ -361,6 +375,7 @@ async function skepticAgentNode(state: TechnicalGraphStateType): Promise<Partial
         userStories: state.userStories,
         validationResult: state.validationResult,
       },
+      clarificationsText: state.clarificationsText || undefined,
     };
 
     const result = await skepticAgent.executeWithRetry(input);
@@ -411,6 +426,7 @@ async function qaAgentNode(state: TechnicalGraphStateType): Promise<Partial<Tech
         validationResult: state.validationResult,
         skepticReview: state.skepticReview,
       },
+      clarificationsText: state.clarificationsText || undefined,
     };
 
     const result = await qaAgent.executeWithRetry(input);
@@ -597,7 +613,11 @@ export function createTechnicalGraph() {
 export async function executeTechnicalPipeline(
   visualResults: VisualPipelineResult,
   detailLevel: DetailLevel,
-  apiStyle?: APIStyle
+  apiStyle?: APIStyle,
+  clarifications?: {
+    questions: ClarificationQuestion[];
+    responses: ClarificationResponse[];
+  }
 ): Promise<TechnicalPipelineResult> {
   const startTime = Date.now();
   console.log('[Technical Pipeline] Starting execution...');
@@ -616,8 +636,19 @@ export async function executeTechnicalPipeline(
   });
 
   try {
+    // Format user clarifications into text for agent prompts
+    const clarificationsText = clarifications
+      ? formatClarificationsForPrompt(clarifications.questions, clarifications.responses)
+      : '';
+
+    if (clarificationsText) {
+      console.log('[Technical Pipeline] User clarifications provided, injecting into agent prompts');
+    }
+
     // Create initial state
-    const initialState = createInitialTechnicalState(visualResults, detailLevel, apiStyle);
+    const initialState = createInitialTechnicalState(
+      visualResults, detailLevel, apiStyle, undefined, clarificationsText
+    );
 
     // Create and run the graph
     const graph = createTechnicalGraph();
@@ -688,7 +719,11 @@ export async function executeTechnicalPipeline(
       skepticReview: finalState.skepticReview || undefined,
       qaReview: finalState.qaReview || '',
       summaries: {
-        identity: finalState.identity,
+        identity: {
+          xml: finalState.identityXml || '',
+          identity: finalState.identity!,
+          confidence: finalState.identityConfidence,
+        },
         database: { xml: finalState.databaseSchema || '', entities: [], relations: [], enums: [] },
         backend: { xml: finalState.backendArchitecture || '', endpoints: [], techStack: { framework: 'Express', runtime: 'Node.js', apiStyle: 'REST' } },
         testing: { xml: finalState.testingStrategy || '', testSuites: [], coverageTarget: 80 },

@@ -41,7 +41,7 @@ class IdentityAgent extends BaseTechnicalAgent<IdentityAgentOutput> {
    * Build user prompt from visual pipeline results
    */
   protected buildUserPrompt(input: TechnicalAgentInput): string {
-    const { visualResults } = input;
+    const { visualResults, clarificationsText } = input;
 
     // Validate input
     if (!visualResults) {
@@ -93,8 +93,13 @@ class IdentityAgent extends BaseTechnicalAgent<IdentityAgentOutput> {
     if (hasSocial) productHints.push('Social/Community features');
     if (hasContent) productHints.push('Content management');
 
-    return `Analyze this website and extract its Product Identity - the "soul" of what this product is trying to achieve.
+    // Build clarifications section if available
+    const clarificationsSection = clarificationsText
+      ? `\n${clarificationsText}\n`
+      : '';
 
+    return `Analyze this website and extract its Product Identity - the "soul" of what this product is trying to achieve.
+${clarificationsSection}
 ## Visual Analysis Results
 
 ### Source URL
@@ -309,10 +314,11 @@ Rate your confidence in this analysis (0-100).`;
     }
 
     // Inference for product vision
+    // Without LLM evidence, default to low confidence - length doesn't indicate quality
     const visionEvidence = findEvidence('vision');
     const visionConf = visionEvidence
       ? visionEvidence.confidence
-      : (identity.vision.statement.length > 50 ? baseConfidence : baseConfidence * 0.7);
+      : 0.4; // No evidence = low confidence, regardless of text length
     inferences.push({
       inference: `Product vision: ${identity.vision.statement.substring(0, 100)}`,
       confidence: parseFloat(Math.min(1, visionConf).toFixed(2)),
@@ -324,10 +330,11 @@ Rate your confidence in this analysis (0-100).`;
     });
 
     // Inference for core problem
+    // Without LLM evidence, default to low confidence - length doesn't indicate quality
     const problemEvidence = findEvidence('problem');
     const problemConf = problemEvidence
       ? problemEvidence.confidence
-      : (identity.problemStatement.coreProblem.length > 30 ? baseConfidence : baseConfidence * 0.6);
+      : 0.35; // No evidence = low confidence, regardless of text length
     inferences.push({
       inference: `Core problem: ${identity.problemStatement.coreProblem.substring(0, 100)}`,
       confidence: parseFloat(Math.min(1, problemConf).toFixed(2)),
@@ -413,82 +420,137 @@ Rate your confidence in this analysis (0-100).`;
   }
 
   /**
-   * Score the vision section based on completeness
+   * Check if text contains generic filler phrases that suggest hallucination
+   */
+  private isGenericFiller(text: string): boolean {
+    const genericPhrases = [
+      'comprehensive solution',
+      'revolutionary platform',
+      'cutting-edge',
+      'world-class',
+      'seamless experience',
+      'one-stop',
+      'all-in-one',
+      'next-generation',
+      'industry-leading',
+      'state-of-the-art',
+      'not inferred',
+      'insufficient evidence',
+    ];
+    const lower = text.toLowerCase();
+    return genericPhrases.some((phrase) => lower.includes(phrase));
+  }
+
+  /**
+   * Score the vision section based on content quality, not length
    */
   private scoreVisionSection(vision: ProductVision): number {
-    let score = 100;
+    let score = 50; // Start at neutral, earn points for quality
 
-    // Deduct for empty/short fields
-    if (!vision.statement || vision.statement.length < 20) score -= 30;
-    else if (vision.statement.length < 50) score -= 15;
+    // Empty fields are a real problem
+    if (!vision.statement) return 0;
 
-    if (!vision.futureState || vision.futureState.length < 20) score -= 25;
-    if (!vision.transformation || vision.transformation.length < 20) score -= 25;
+    // Present and non-empty: base points
+    if (vision.statement.trim()) score += 10;
+    if (vision.futureState?.trim()) score += 10;
+    if (vision.transformation?.trim()) score += 10;
+    if (vision.timeframe?.trim()) score += 5;
 
-    // Bonus for having timeframe
-    if (!vision.timeframe) score -= 10;
+    // Penalize generic filler content
+    if (this.isGenericFiller(vision.statement)) score -= 20;
+    if (vision.futureState && this.isGenericFiller(vision.futureState)) score -= 10;
+
+    // Reward specificity: contains numbers, specific nouns, or measurable outcomes
+    if (/\d/.test(vision.statement)) score += 10; // Contains numbers
+    if (vision.statement.includes('%') || vision.statement.includes('$')) score += 5;
 
     return Math.max(0, Math.min(100, score));
   }
 
   /**
-   * Score the problem statement section
+   * Score the problem statement section based on content quality
    */
   private scoreProblemSection(problem: IdentityProblemStatement): number {
-    let score = 100;
+    let score = 50;
 
-    // Deduct for empty/short fields
-    if (!problem.coreProblem || problem.coreProblem.length < 20) score -= 30;
+    if (!problem.coreProblem) return 0;
 
-    // Deduct if no affected segments
-    if (problem.affectedSegments.length === 0) score -= 25;
-    else if (problem.affectedSegments.length < 2) score -= 10;
+    // Present and non-empty
+    if (problem.coreProblem.trim()) score += 10;
 
-    if (!problem.costOfInaction || problem.costOfInaction.length < 10) score -= 20;
+    // Affected segments show specificity
+    if (problem.affectedSegments.length >= 2) score += 15;
+    else if (problem.affectedSegments.length === 1) score += 5;
+    else score -= 15; // No segments at all
 
-    // Existing solutions is optional but helpful
-    if (!problem.existingSolutions) score -= 10;
+    if (problem.costOfInaction?.trim()) score += 10;
+    if (problem.existingSolutions?.trim()) score += 5;
+
+    // Penalize generic content
+    if (this.isGenericFiller(problem.coreProblem)) score -= 20;
+
+    // Reward specificity
+    if (/\d/.test(problem.coreProblem)) score += 10;
 
     return Math.max(0, Math.min(100, score));
   }
 
   /**
-   * Score the value proposition section
+   * Score the value proposition section based on content quality
    */
   private scoreValueSection(value: ValueProposition): number {
-    let score = 100;
+    let score = 50;
 
-    if (!value.uniqueValue || value.uniqueValue.length < 20) score -= 30;
-    if (!value.targetAudience || value.targetAudience.length < 10) score -= 20;
+    if (!value.uniqueValue) return 0;
 
-    // Key benefits
-    if (value.keyBenefits.length === 0) score -= 25;
-    else if (value.keyBenefits.length < 2) score -= 10;
+    // Present and non-empty
+    if (value.uniqueValue.trim()) score += 10;
+    if (value.targetAudience?.trim()) score += 10;
 
-    // Competitive advantage is optional but helpful
-    if (!value.competitiveAdvantage) score -= 10;
+    // Key benefits show depth
+    if (value.keyBenefits.length >= 3) score += 15;
+    else if (value.keyBenefits.length >= 1) score += 5;
+    else score -= 15;
+
+    if (value.competitiveAdvantage?.trim()) score += 5;
+
+    // Penalize generic content
+    if (this.isGenericFiller(value.uniqueValue)) score -= 20;
+
+    // Reward quantified benefits
+    const hasQuantifiedBenefit = value.keyBenefits.some((b) => /\d/.test(b.impact));
+    if (hasQuantifiedBenefit) score += 10;
 
     return Math.max(0, Math.min(100, score));
   }
 
   /**
-   * Score the AI coder context section
+   * Score the AI coder context section based on content quality
    */
   private scoreAICoderSection(context: AICoderContext): number {
-    let score = 100;
+    let score = 50;
 
-    if (!context.productSummary || context.productSummary.length < 50) score -= 25;
+    if (!context.productSummary) return 0;
 
-    // Core entities
-    if (context.coreEntities.length === 0) score -= 25;
-    else if (context.coreEntities.length < 3) score -= 10;
+    // Present and non-empty
+    if (context.productSummary.trim()) score += 10;
+
+    // Core entities count (quality indicator - specific domain knowledge)
+    if (context.coreEntities.length >= 5) score += 15;
+    else if (context.coreEntities.length >= 3) score += 10;
+    else if (context.coreEntities.length >= 1) score += 5;
+    else score -= 15;
 
     // Critical flows
-    if (context.criticalFlows.length === 0) score -= 25;
-    else if (context.criticalFlows.length < 2) score -= 10;
+    if (context.criticalFlows.length >= 3) score += 15;
+    else if (context.criticalFlows.length >= 1) score += 5;
+    else score -= 10;
 
-    // Constraints are optional but helpful for complex projects
-    if (context.constraints.length === 0) score -= 10;
+    // Constraints show thoughtfulness
+    if (context.constraints.length >= 1) score += 5;
+
+    // Penalize generic summary
+    if (this.isGenericFiller(context.productSummary)) score -= 15;
 
     return Math.max(0, Math.min(100, score));
   }
